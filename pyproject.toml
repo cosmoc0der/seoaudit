@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "seoaudit"
+version = "0.1.0"
+description = "Modular SEO audit engine with plugin-based checks"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx[http2]>=0.24",
+    "selectolax>=0.3.11",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "protego>=0.2",
+    "defusedxml>=0.7",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/seoaudit"]
