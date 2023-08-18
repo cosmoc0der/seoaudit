@@ -1,0 +1,109 @@
+# Report sections in display order. weight = share in the overall score.
+indexability:
+  weight: 1.5
+  text:
+    ru:
+      name: Индексация и сканирование
+      description: Могут ли поисковые роботы найти, просканировать и проиндексировать страницы сайта.
+    en:
+      name: Crawling & indexing
+      description: Whether search engines can discover, crawl and index the site.
+meta:
+  weight: 1.2
+  text:
+    ru:
+      name: Мета-теги и сниппеты
+      description: Title, description и теги соцсетей формируют сниппет в выдаче и при репостах.
+    en:
+      name: Meta tags & snippets
+      description: Title, description and social tags that shape search and share snippets.
+content:
+  weight: 1.2
+  text:
+    ru:
+      name: Контент и заголовки
+      description: Структура заголовков, объём, уникальность и качество текстового контента.
+    en:
+      name: Content & headings
+      description: Heading structure, volume, uniqueness and quality of the content.
+links:
+  weight: 1.0
+  text:
+    ru:
+      name: Ссылки
+      description: Битые ссылки, редиректы, анкоры и перелинковка.
+    en:
+      name: Links
+      description: Broken links, redirects, anchors and internal linking.
+images:
+  weight: 0.8
+  text:
+    ru:
+      name: Изображения
+      description: Вес, форматы, alt-тексты и корректная загрузка изображений.
+    en:
+      name: Images
+      description: Image weight, formats, alt texts and loading.
+performance:
+  weight: 1.3
+  text:
+    ru:
+      name: Скорость загрузки
+      description: Время ответа сервера, Core Web Vitals, сжатие и кэширование.
+    en:
+      name: Performance
+      description: Server response, Core Web Vitals, compression and caching.
+mobile:
+  weight: 1.0
+  text:
+    ru:
+      name: Мобильная версия
+      description: Корректное отображение на смартфонах — основа mobile-first индексации.
+    en:
+      name: Mobile
+      description: Mobile rendering, the basis of mobile-first indexing.
+security:
+  weight: 1.0
+  text:
+    ru:
+      name: Безопасность
+      description: HTTPS, сертификат, заголовки безопасности и утечки служебных файлов.
+    en:
+      name: Security
+      description: HTTPS, certificate, security headers and exposed files.
+html:
+  weight: 0.6
+  text:
+    ru:
+      name: Валидность HTML
+      description: Корректность разметки, влияющая на парсинг страницы роботами и браузерами.
+    en:
+      name: HTML validity
+      description: Markup correctness that affects how bots and browsers parse pages.
+structured_data:
+  weight: 0.7
+  text:
+    ru:
+      name: Микроразметка
+      description: Schema.org (JSON-LD, Microdata) для расширенных сниппетов.
+    en:
+      name: Structured data
+      description: Schema.org markup for rich results.
+urls:
+  weight: 0.5
+  text:
+    ru:
+      name: Структура URL
+      description: Читаемость и единообразие адресов страниц.
+    en:
+      name: URL structure
+      description: Readability and consistency of page URLs.
+international:
+  weight: 0.5
+  text:
+    ru:
+      name: Мультиязычность
+      description: Корректность hreflang для языковых и региональных версий.
+    en:
+      name: International
+      description: hreflang correctness for language and regional versions.
