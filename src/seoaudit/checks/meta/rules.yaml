@@ -1,0 +1,255 @@
+category: meta
+
+rules:
+  title_missing:
+    severity: critical
+    refs: [https://developers.google.com/search/docs/appearance/title-link]
+    text:
+      ru:
+        title: Отсутствует тег title
+        description: >-
+          Title — главный on-page фактор ранжирования и заголовок сниппета в выдаче.
+          Без него поисковик сам сгенерирует заголовок, часто неудачный.
+        recommendation: Добавьте уникальный информативный title на каждую страницу.
+        fix: |
+          Добавьте в `<head>` тег `<title>` с ключевой фразой в начале:
+          ```html
+          <head>
+            <title>Купить ноутбук ASUS ROG в Алматы — цены, отзывы | ShopName</title>
+          </head>
+          ```
+          В CMS/фреймворке задайте шаблон title для каждого типа страниц
+          (категория, товар, статья), чтобы он генерировался автоматически.
+
+  title_multiple:
+    severity: medium
+    text:
+      ru:
+        title: Несколько тегов title на странице
+        description: Несколько title сбивают поисковик — он может выбрать не тот заголовок.
+        recommendation: Оставьте ровно один title в `<head>`.
+        message: "Найдено тегов title: $count"
+        fix: |
+          Найдите в шаблонах (layout, header, SEO-плагины) дублирующий вывод `<title>`
+          и оставьте один. Частая причина — тема CMS и SEO-плагин выводят title одновременно.
+
+  title_length:
+    severity: medium
+    params:
+      min_length: 30
+      max_length: 65
+    refs: [https://developers.google.com/search/docs/appearance/title-link]
+    text:
+      ru:
+        title: Неоптимальная длина title
+        description: >-
+          Слишком короткий title не раскрывает содержимое страницы, слишком длинный
+          обрезается в выдаче. Рекомендуемая длина — $min_length–$max_length символов.
+        recommendation: Приведите длину title к диапазону $min_length–$max_length символов.
+        message:
+          short: "Слишком короткий ($length симв.): «$value»"
+          long: "Слишком длинный ($length симв.): «$value»"
+        fix: |
+          - Ставьте главную ключевую фразу в начало title.
+          - Добавляйте уточнения: регион, тип товара, выгоду.
+          - Название бренда выносите в конец через `|` или `—`.
+          - Для шаблонных страниц обрезайте динамическую часть по длине на бэкенде.
+
+  title_duplicate:
+    severity: high
+    scope: page
+    text:
+      ru:
+        title: Дублирующиеся title
+        description: >-
+          Одинаковые title на разных страницах мешают поисковику понять, какую страницу
+          показывать по запросу, и приводят к каннибализации.
+        recommendation: Сделайте title уникальным для каждой индексируемой страницы.
+        message: "«$value» — ещё на $count стр."
+        fix: |
+          Добавьте в шаблон title уникализирующие элементы: название товара/категории,
+          номер страницы пагинации (`— страница 2`), значения фильтров.
+          Если страницы действительно дублируют друг друга — склейте их 301-редиректом
+          или укажите `<link rel="canonical">` на основную.
+
+  description_missing:
+    severity: high
+    refs: [https://developers.google.com/search/docs/appearance/snippet]
+    text:
+      ru:
+        title: Отсутствует meta description
+        description: >-
+          Description используется для формирования сниппета. Без него поисковик возьмёт
+          случайный фрагмент текста, что снижает CTR.
+        recommendation: Добавьте продающее описание страницы в meta description.
+        fix: |
+          ```html
+          <meta name="description" content="Ноутбуки ASUS ROG в наличии: 120 моделей, доставка за 1 день, гарантия 2 года. Сравните цены и закажите онлайн.">
+          ```
+          Для массовых страниц настройте шаблон: `{Название} — {ключевая выгода}. {Призыв к действию}.`
+
+  description_length:
+    severity: low
+    params:
+      min_length: 70
+      max_length: 160
+    text:
+      ru:
+        title: Неоптимальная длина meta description
+        description: Оптимальная длина description — $min_length–$max_length символов, длиннее обрезается в выдаче.
+        recommendation: Приведите длину description к диапазону $min_length–$max_length символов.
+        message:
+          short: "Слишком короткий ($length симв.): «$value»"
+          long: "Слишком длинный ($length симв.): «$value»"
+        fix: |
+          Сформулируйте 1–2 предложения: что на странице, ключевая выгода, призыв к действию.
+          Важное размещайте в первых 120 символах — на мобильных сниппет короче.
+
+  description_duplicate:
+    severity: medium
+    text:
+      ru:
+        title: Дублирующиеся meta description
+        description: Одинаковые описания снижают релевантность сниппетов и сигнализируют о шаблонном контенте.
+        recommendation: Сделайте description уникальным для каждой индексируемой страницы.
+        message: "«$value» — ещё на $count стр."
+        fix: |
+          Используйте в шаблоне динамические данные страницы (название, цену, характеристики).
+          Если уникальный текст сформировать нельзя — лучше оставить description пустым,
+          чем дублировать: поисковик сам подберёт фрагмент.
+
+  viewport_missing:
+    severity: high
+    category: mobile
+    refs: [https://developer.mozilla.org/docs/Web/HTML/Viewport_meta_tag]
+    text:
+      ru:
+        title: Отсутствует meta viewport
+        description: >-
+          Без viewport мобильные браузеры показывают десктопную версию в уменьшенном виде.
+          Страница не считается адаптированной под мобильные — это критично при mobile-first индексации.
+        recommendation: Добавьте meta viewport в `<head>` всех страниц.
+        fix: |
+          ```html
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          ```
+
+  viewport_invalid:
+    severity: medium
+    category: mobile
+    text:
+      ru:
+        title: Некорректный meta viewport
+        description: Viewport без `width=device-width` или с запретом масштабирования ухудшает мобильный UX и доступность.
+        recommendation: Используйте адаптивный viewport без запрета масштабирования.
+        message:
+          width: "Нет width=device-width: «$value»"
+          zoom: "Запрещено масштабирование: «$value»"
+        fix: |
+          Замените значение на стандартное:
+          ```html
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          ```
+          Уберите `user-scalable=no` и `maximum-scale=1` — пользователи со слабым зрением
+          должны иметь возможность увеличить страницу.
+
+  charset_missing:
+    severity: low
+    category: html
+    text:
+      ru:
+        title: Не указана кодировка страницы
+        description: Без явной кодировки браузер и роботы могут неверно отобразить текст (кракозябры).
+        recommendation: Укажите кодировку UTF-8 в заголовке ответа и в HTML.
+        fix: |
+          Первой строкой в `<head>`:
+          ```html
+          <meta charset="utf-8">
+          ```
+          И в заголовке ответа сервера: `Content-Type: text/html; charset=utf-8`.
+
+  lang_missing:
+    severity: medium
+    text:
+      ru:
+        title: Не указан язык страницы (html lang)
+        description: Атрибут lang помогает поисковикам и экранным дикторам определить язык контента.
+        recommendation: Укажите язык в атрибуте lang тега html.
+        fix: |
+          ```html
+          <html lang="ru">
+          ```
+          Для мультиязычного сайта значение должно соответствовать языку конкретной версии (`kk`, `en` и т.д.).
+
+  meta_refresh:
+    severity: medium
+    category: indexability
+    text:
+      ru:
+        title: Используется meta refresh
+        description: >-
+          Перенаправление через meta refresh медленнее серверного редиректа, хуже передаёт
+          ссылочный вес и может восприниматься как манипуляция.
+        recommendation: Замените meta refresh на серверный 301-редирект.
+        message: "meta refresh: «$value»"
+        fix: |
+          Удалите `<meta http-equiv="refresh" ...>` и настройте редирект на сервере.
+          nginx:
+          ```nginx
+          location = /old-page { return 301 https://example.com/new-page; }
+          ```
+          Apache (.htaccess):
+          ```apache
+          Redirect 301 /old-page https://example.com/new-page
+          ```
+
+  og_missing:
+    severity: low
+    params:
+      required: ["og:title", "og:description", "og:image"]
+    refs: [https://ogp.me/]
+    text:
+      ru:
+        title: Нет разметки Open Graph
+        description: >-
+          Open Graph определяет, как страница выглядит при репостах в соцсетях и мессенджерах
+          (Telegram, WhatsApp, Facebook). Без неё превью формируется случайно.
+        recommendation: "Добавьте теги Open Graph: $required."
+        message: "Не хватает: $missing"
+        fix: |
+          ```html
+          <meta property="og:type" content="website">
+          <meta property="og:title" content="Заголовок страницы">
+          <meta property="og:description" content="Краткое описание">
+          <meta property="og:image" content="https://example.com/og/page.jpg">
+          <meta property="og:url" content="https://example.com/page">
+          ```
+          Рекомендуемый размер og:image — 1200×630 px.
+
+  twitter_card_missing:
+    severity: info
+    text:
+      ru:
+        title: Нет разметки Twitter Card
+        description: Twitter Card управляет превью ссылок в X (Twitter). При её отсутствии используется Open Graph.
+        recommendation: При необходимости добавьте `twitter:card`.
+        fix: |
+          ```html
+          <meta name="twitter:card" content="summary_large_image">
+          ```
+
+  favicon_missing:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: Нет favicon
+        description: Favicon отображается в выдаче Google и Яндекса рядом с сайтом и повышает узнаваемость.
+        recommendation: Добавьте favicon и объявите его в `<head>`.
+        fix: |
+          ```html
+          <link rel="icon" href="/favicon.ico" sizes="32x32">
+          <link rel="icon" href="/icon.svg" type="image/svg+xml">
+          <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+          ```
+          Размер иконки для выдачи — кратный 48×48 px. Файл не должен быть закрыт в robots.txt.
