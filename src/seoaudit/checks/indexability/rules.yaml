@@ -1,0 +1,331 @@
+category: indexability
+
+rules:
+  robots_missing:
+    severity: medium
+    scope: site
+    refs: [https://developers.google.com/search/docs/crawling-indexing/robots/intro]
+    text:
+      ru:
+        title: Нет файла robots.txt
+        description: >-
+          robots.txt управляет сканированием сайта: закрывает служебные разделы, указывает
+          путь к sitemap. Без него роботы тратят краулинговый бюджет на мусорные URL.
+        recommendation: Создайте robots.txt в корне сайта.
+        fix: |
+          Файл должен отдаваться по адресу `/robots.txt` с кодом 200 и `Content-Type: text/plain`:
+          ```text
+          User-agent: *
+          Disallow: /admin/
+          Disallow: /cart/
+          Disallow: /*?sort=
+          Disallow: /search
+
+          Sitemap: https://example.com/sitemap.xml
+          ```
+
+  robots_error:
+    severity: critical
+    scope: site
+    refs: [https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt#http-status-codes]
+    text:
+      ru:
+        title: robots.txt отдаёт ошибку сервера
+        description: >-
+          Если robots.txt отвечает 5xx или не отвечает, Google считает весь сайт закрытым
+          от сканирования и прекращает обход.
+        recommendation: Обеспечьте стабильный ответ 200 (или 404, если файла нет) для /robots.txt.
+        message: "Ответ: $status"
+        fix: |
+          Проверьте конфигурацию веб-сервера и CMS: robots.txt должен отдаваться как статический
+          файл, без зависимостей от бэкенда. Для nginx:
+          ```nginx
+          location = /robots.txt { root /var/www/site; access_log off; }
+          ```
+
+  robots_blocks_all:
+    severity: critical
+    scope: site
+    params:
+      agents: [Googlebot, Yandex]
+    text:
+      ru:
+        title: robots.txt закрывает сайт от индексации
+        description: Главная страница запрещена к сканированию для поискового робота — сайт выпадет из выдачи.
+        recommendation: Уберите запрещающее правило для главной и основных разделов.
+        message: "Сканирование запрещено для $agent"
+        fix: |
+          Найдите в robots.txt правило вида:
+          ```text
+          User-agent: *
+          Disallow: /
+          ```
+          Оно часто остаётся после разработки на тестовом домене. Замените на точечные запреты
+          служебных разделов. Проверьте результат в Google Search Console → «Инструмент проверки robots.txt»
+          и в Яндекс.Вебмастере → «Анализ robots.txt».
+
+  robots_no_sitemap:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: В robots.txt не указан Sitemap
+        description: Директива Sitemap помогает всем поисковикам быстрее находить карту сайта.
+        recommendation: Добавьте директиву Sitemap с абсолютным URL.
+        fix: |
+          В конец robots.txt:
+          ```text
+          Sitemap: https://example.com/sitemap.xml
+          ```
+
+  sitemap_missing:
+    severity: medium
+    scope: site
+    refs: [https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview]
+    text:
+      ru:
+        title: Не найден sitemap.xml
+        description: Карта сайта ускоряет обнаружение и переобход страниц, особенно глубоких и новых.
+        recommendation: Сгенерируйте sitemap.xml и сообщите о нём поисковикам.
+        fix: |
+          1. Настройте автоматическую генерацию sitemap (плагин CMS или скрипт по расписанию).
+          2. Включайте только канонические индексируемые URL с кодом 200.
+          3. До 50 000 URL / 50 МБ на файл, при большем объёме — sitemap index.
+          4. Укажите карту в robots.txt и добавьте в Google Search Console и Яндекс.Вебмастер.
+          ```xml
+          <?xml version="1.0" encoding="UTF-8"?>
+          <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://example.com/</loc><lastmod>2023-09-15</lastmod></url>
+          </urlset>
+          ```
+
+  sitemap_invalid:
+    severity: high
+    scope: site
+    text:
+      ru:
+        title: Ошибка в sitemap
+        description: Sitemap не загружается или содержит невалидный XML — поисковик не сможет его обработать.
+        recommendation: Исправьте доступность и синтаксис карты сайта.
+        message:
+          http: "Файл недоступен, ответ: $error"
+          html: "Вместо XML отдаётся HTML-страница ($error)"
+          parse: "Невалидный XML: $error"
+        fix: |
+          Проверьте файл валидатором (например, https://www.xml-sitemaps.com/validate-xml-sitemap.html),
+          убедитесь, что он отдаётся с кодом 200 и `Content-Type: application/xml`,
+          а в начале файла нет пробелов или BOM перед `<?xml`. Sitemap не должен редиректить
+          на другие страницы (авторизация, заглушки) — поисковик получит HTML вместо XML.
+          Удалите из robots.txt директивы Sitemap, ведущие на несуществующие файлы.
+
+  sitemap_bad_urls:
+    severity: medium
+    text:
+      ru:
+        title: В sitemap есть неканонические или недоступные URL
+        description: >-
+          Карта сайта должна содержать только индексируемые страницы с кодом 200. Мусорные URL
+          снижают доверие поисковика к sitemap и тратят краулинговый бюджет.
+        recommendation: Исключите из sitemap редиректы, ошибки, noindex и неканонические страницы.
+        message:
+          error: "Ответ: $status"
+          redirect: "Редирект на $target"
+          noindex: "Страница закрыта noindex"
+          canonical: "Canonical указывает на $target"
+        fix: |
+          Добавьте в генератор sitemap фильтр: только страницы со статусом 200, без noindex,
+          у которых canonical совпадает с собственным URL. Для редиректов — указывайте конечный URL.
+
+  home_noindex:
+    severity: critical
+    text:
+      ru:
+        title: Главная страница закрыта noindex
+        description: Главная страница запрещена к индексации — она не будет показываться в поиске.
+        recommendation: Немедленно уберите noindex с главной страницы.
+        message: "Источник: $source"
+        fix: |
+          Удалите `<meta name="robots" content="noindex">` из шаблона главной или заголовок
+          `X-Robots-Tag: noindex` из конфигурации сервера. В WordPress проверьте
+          «Настройки → Чтение → Попросить поисковые системы не индексировать сайт».
+
+  noindex:
+    severity: info
+    text:
+      ru:
+        title: Страницы закрыты от индексации (noindex)
+        description: >-
+          Эти страницы не попадут в индекс. Это нормально для служебных разделов, но проверьте,
+          что среди них нет важных посадочных страниц.
+        recommendation: Проверьте список и уберите noindex с целевых страниц.
+        message: "Источник: $source"
+        fix: |
+          Если страница должна индексироваться — удалите `noindex` из meta robots или заголовка
+          `X-Robots-Tag`. Не закрывайте noindex-страницы в robots.txt одновременно, иначе робот
+          не увидит директиву.
+
+  canonical_missing:
+    severity: medium
+    refs: [https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls]
+    text:
+      ru:
+        title: Не указан canonical
+        description: >-
+          Без canonical поисковик сам выбирает основную версию среди дублей (UTM-метки,
+          сортировки, слэши), что размывает сигналы ранжирования.
+        recommendation: Добавьте самоссылающийся canonical на каждую индексируемую страницу.
+        fix: |
+          ```html
+          <link rel="canonical" href="https://example.com/catalog/notebooks/">
+          ```
+          URL — абсолютный, совпадает с адресом страницы без GET-параметров отслеживания.
+          Для страниц-дублей указывайте адрес основной страницы.
+
+  canonical_multiple:
+    severity: high
+    text:
+      ru:
+        title: Несколько разных canonical на странице
+        description: При конфликте canonical поисковики игнорируют все указания.
+        recommendation: Оставьте ровно один canonical.
+        message: "Значения: $values"
+        fix: |
+          Обычно второй canonical добавляет SEO-плагин или сторонний скрипт. Найдите источник
+          и отключите дублирующий вывод. Проверьте и HTTP-заголовок `Link: <...>; rel="canonical"`.
+
+  canonical_non_self:
+    severity: info
+    text:
+      ru:
+        title: Canonical указывает на другую страницу
+        description: >-
+          Страница объявляет основной другую страницу и, скорее всего, не будет проиндексирована.
+          Убедитесь, что это сделано намеренно.
+        recommendation: Проверьте, что canonical на другие URL выставлен только для дублей.
+        message: "Canonical → $target"
+        fix: |
+          Если страница уникальна — исправьте canonical на её собственный URL.
+          Частая ошибка — canonical на первую страницу пагинации или на главную со всех страниц.
+
+  canonical_broken:
+    severity: high
+    params:
+      max_probes: 200
+    text:
+      ru:
+        title: Canonical ведёт на недоступный или перенаправляемый URL
+        description: Canonical на страницу с ошибкой или редиректом игнорируется поисковиками.
+        recommendation: Укажите в canonical конечный URL с кодом ответа 200.
+        message:
+          error: "$target отвечает: $status"
+          redirect: "$target перенаправляет"
+        fix: |
+          Сверьте формат URL в canonical с реальным адресом: протокол (https), www, слэш на конце,
+          регистр. Canonical должен вести на страницу, которая отдаёт 200 без редиректов.
+
+  redirect_chain:
+    severity: medium
+    scope: page
+    params:
+      max_hops: 1
+    text:
+      ru:
+        title: Цепочки редиректов
+        description: Каждый дополнительный редирект замедляет загрузку и теряет часть ссылочного веса.
+        recommendation: Настройте прямой редирект с исходного URL на конечный за один шаг.
+        message: "$hops редиректа: $chain"
+        fix: |
+          Типичная цепочка: `http://site.ru` → `https://site.ru` → `https://www.site.ru` → `/home/`.
+          Объедините правила так, чтобы любой вариант сразу вёл на канонический URL. nginx:
+          ```nginx
+          server {
+            listen 80;
+            server_name site.ru www.site.ru;
+            return 301 https://www.site.ru$request_uri;
+          }
+          ```
+          Также обновите внутренние ссылки, чтобы они вели сразу на конечные адреса.
+
+  redirect_temporary:
+    severity: low
+    text:
+      ru:
+        title: Временные редиректы (302/307)
+        description: Временный редирект сообщает, что старый URL вернётся, поэтому вес передаётся медленнее.
+        recommendation: Для постоянных переездов используйте 301 или 308.
+        message: "$status → $target"
+        fix: |
+          Замените код редиректа на 301 в конфигурации сервера или приложения:
+          ```nginx
+          return 301 https://example.com/new-url;
+          ```
+          ```python
+          return redirect(url, code=301)  # Flask; Django: HttpResponsePermanentRedirect
+          ```
+
+  blocked_by_robots:
+    severity: info
+    text:
+      ru:
+        title: Ссылки на страницы, закрытые в robots.txt
+        description: На эти URL ведут внутренние ссылки, но robots.txt запрещает их сканировать.
+        recommendation: Проверьте, что закрыты только служебные разделы.
+        message: "Входящих ссылок: $inlinks"
+        fix: |
+          Если страница должна быть в поиске — уберите правило Disallow. Если нет — рассмотрите
+          удаление ссылок на неё или добавление `rel="nofollow"`, чтобы не тратить бюджет сканирования.
+
+  orphan_pages:
+    severity: low
+    text:
+      ru:
+        title: Страницы-сироты
+        description: >-
+          Страницы есть в sitemap, но на них нет внутренних ссылок. Поисковики считают их
+          малозначимыми, они плохо ранжируются.
+        recommendation: Добавьте на эти страницы ссылки из меню, категорий или релевантных материалов.
+        fix: |
+          Встройте страницы в структуру сайта: каталоги, хлебные крошки, блоки «похожие товары»
+          и «читайте также». Если страница не нужна — удалите её из sitemap.
+
+  deep_pages:
+    severity: low
+    params:
+      max_depth: 3
+    text:
+      ru:
+        title: Слишком глубокая вложенность страниц
+        description: >-
+          До страницы больше $max_depth кликов от главной. Чем глубже страница, тем реже её
+          сканируют и тем меньше веса она получает.
+        recommendation: Сократите путь до важных страниц до $max_depth кликов.
+        message: "Глубина: $depth кликов"
+        fix: |
+          Добавьте ссылки на глубокие разделы в меню, футер, хлебные крошки, HTML-карту сайта.
+          Для каталогов увеличьте число товаров на странице или используйте фильтры вместо
+          длинной пагинации.
+
+  host_duplicate:
+    severity: high
+    scope: site
+    text:
+      ru:
+        title: Сайт доступен с www и без www
+        description: Обе версии отвечают 200 без редиректа — поисковик видит два одинаковых сайта.
+        recommendation: Настройте 301-редирект на основное зеркало.
+        message: "Дубль без редиректа, основной: $main"
+        fix: |
+          nginx:
+          ```nginx
+          server {
+            listen 443 ssl;
+            server_name www.example.com;
+            return 301 https://example.com$request_uri;
+          }
+          ```
+          Apache (.htaccess):
+          ```apache
+          RewriteEngine On
+          RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+          RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+          ```
