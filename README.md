@@ -1,5 +1,22 @@
 # seoaudit
 
-Модульный SEO-аудитор сайтов: краулер + плагины проверок.
+Модульный SEO-аудитор сайтов: краулер + плагины проверок + отчёты с рекомендациями.
 
-Пока в разработке.
+## Установка
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
+pip install -e .
+```
+
+## Использование
+
+```bash
+seoaudit audit https://example.com          # JSON в ./reports
+seoaudit audit example.com --max-pages 500
+seoaudit rules                               # все правила с текущими порогами
+seoaudit checks                              # подключённые модули
+```
+
+Пороги, важность и тексты правил лежат в `rules.yaml` рядом с модулем проверки.

@@ -13,9 +13,14 @@ dependencies = [
     "selectolax>=0.3.11",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "typer>=0.9",
+    "rich>=13.0",
     "protego>=0.2",
     "defusedxml>=0.7",
 ]
+
+[project.scripts]
+seoaudit = "seoaudit.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/seoaudit"]
