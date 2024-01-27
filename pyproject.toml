@@ -9,10 +9,12 @@ description = "Modular SEO audit engine with plugin-based checks"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "httpx[http2]>=0.24",
+    "httpx[http2,brotli]>=0.24",
     "selectolax>=0.3.11",
     "pydantic>=2.0",
     "pyyaml>=6.0",
+    "jinja2>=3.1",
+    "markdown-it-py>=3.0",
     "typer>=0.9",
     "rich>=13.0",
     "protego>=0.2",

@@ -1,0 +1,83 @@
+report_title: SEO-аудит сайта
+audit_date: Дата аудита
+pages_crawled: Просканировано страниц
+overall_score: Общая оценка
+prepared_by: Подготовил
+summary: Сводка
+category_scores: Оценка по разделам
+top_issues: Приоритетные проблемы
+no_issues: Серьёзных проблем не обнаружено.
+issues: Проблемы
+issue: Проблема
+category: Раздел
+affected: Затронуто
+affected_short: URL
+why_matters: Почему это важно
+what_to_do: Что сделать
+dev_instructions: Инструкция для разработчика
+affected_urls: Где найдено
+details: Детали
+more_urls: "…и ещё {n}. Полный список — в CSV/JSON-выгрузке."
+references: Документация
+passed_checks: "Проверено — проблем не обнаружено"
+issues_forms: [проблема, проблемы, проблем]
+notes:
+  crawl_limit_reached: достигнут лимит сканирования
+  no_sitemap: sitemap не найден
+  no_images: изображений не найдено
+  no_static_resources: статических ресурсов не найдено
+  no_hreflang: hreflang на сайте не используется
+  not_https: сайт работает без HTTPS
+  port_80_closed: HTTP-порт 80 закрыт
+  validator_unavailable: валидатор W3C недоступен
+  findings_truncated: список находок сокращён
+other_checks: Не применимо / пропущено
+checks_total: проверок
+score: Оценка
+appendix: Приложение
+crawl_stats: Статистика сканирования
+crawled_pages: Просканированные страницы
+diagnostics: Технические замечания
+status_code: Код
+depth: Глубина
+ttfb: TTFB, мс
+legend_title: Как читать отчёт
+legend_text: >-
+  Каждая проверка имеет уровень важности. Начинайте исправление с критичных и высоких —
+  они сильнее всего влияют на индексацию и позиции. Для каждой проблемы приведены
+  объяснение, рекомендация и техническая инструкция для разработчика.
+score_text: >-
+  Оценка рассчитывается по каждому разделу с учётом важности проверок и доли затронутых
+  страниц. Общая оценка — взвешенное среднее по разделам.
+stats:
+  pages_total: Всего URL
+  html_pages: HTML-страниц (200)
+  error_pages: Ошибки (4xx/5xx)
+  redirects: Редиректы
+  blocked_by_robots: Закрыто в robots.txt
+  sitemap_urls: URL в sitemap
+  duration_s: Время сканирования, с
+severity:
+  critical: Критично
+  high: Высокий
+  medium: Средний
+  low: Низкий
+  info: Инфо
+severity_plural:
+  critical: Критичных
+  high: Высоких
+  medium: Средних
+  low: Низких
+  info: Информационных
+status:
+  passed: Пройдено
+  failed: Нарушение
+  not_applicable: Не применимо
+  skipped: Пропущено
+  error: Ошибка проверки
+grade:
+  A: Отлично
+  B: Хорошо
+  C: Удовлетворительно
+  D: Плохо
+  F: Критично

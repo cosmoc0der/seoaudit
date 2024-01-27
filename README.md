@@ -13,7 +13,7 @@ pip install -e .
 ## Использование
 
 ```bash
-seoaudit audit https://example.com          # JSON в ./reports
+seoaudit audit https://example.com          # HTML + JSON в ./reports
 seoaudit audit example.com --max-pages 500
 seoaudit rules                               # все правила с текущими порогами
 seoaudit checks                              # подключённые модули

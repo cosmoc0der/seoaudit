@@ -41,7 +41,7 @@ def audit(
     url: Annotated[str, typer.Argument(help="Site URL, e.g. https://example.com")],
     config: ConfigOption = None,
     out: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")] = Path("reports"),
-    formats: Annotated[Optional[list[str]], typer.Option("--format", "-f", help="json, csv")] = None,
+    formats: Annotated[Optional[list[str]], typer.Option("--format", "-f", help="html, json, csv")] = None,
     max_pages: Annotated[Optional[int], typer.Option(help="Crawl limit.")] = None,
     lang: Annotated[Optional[str], typer.Option(help="Report language.")] = None,
     disable: Annotated[Optional[list[str]], typer.Option("--disable", "-d", help="Checks to skip, e.g. pagespeed,html")] = None,
@@ -99,7 +99,7 @@ def render(
 ) -> None:
     """Re-render reports from a saved JSON without re-crawling."""
     cfg = _load(config)
-    _write(load_report(report_json), out, cfg, _split(formats) or ["json"])
+    _write(load_report(report_json), out, cfg, _split(formats) or ["html"])
 
 
 @app.command()
