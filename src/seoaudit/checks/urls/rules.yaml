@@ -1,0 +1,83 @@
+category: urls
+
+rules:
+  too_long:
+    severity: low
+    params:
+      max_length: 115
+    text:
+      ru:
+        title: Слишком длинные URL
+        description: URL длиннее $max_length символов хуже читаются, обрезаются в выдаче и при копировании.
+        recommendation: Сократите URL, оставив ключевые слова.
+        message: "Длина: $length симв."
+        fix: |
+          Уберите из URL стоп-слова, дублирование категорий и идентификаторы:
+          `/catalog/category/notebooks/gaming-notebooks/asus/rog-strix-g16-2023-black-id12345` →
+          `/notebooks/asus-rog-strix-g16/`. При смене URL настройте 301-редиректы со старых адресов.
+
+  uppercase:
+    severity: low
+    text:
+      ru:
+        title: Заглавные буквы в URL
+        description: URL чувствительны к регистру — `/Page` и `/page` считаются разными страницами, что создаёт дубли.
+        recommendation: Используйте только строчные буквы и редиректите варианты с заглавными.
+        fix: |
+          Приведите генерацию ЧПУ к нижнему регистру и добавьте 301-редирект со старых адресов.
+          nginx (через map или в приложении) — проще всего реализовать в роутере приложения:
+          ```python
+          if request.path != request.path.lower():
+              return redirect(request.path.lower(), code=301)
+          ```
+
+  underscores:
+    severity: info
+    text:
+      ru:
+        title: Подчёркивания в URL
+        description: Google рекомендует дефисы для разделения слов — подчёркивание может не распознаваться как разделитель.
+        recommendation: Для новых страниц используйте дефисы вместо подчёркиваний.
+        fix: |
+          Меняйте URL существующих страниц только вместе с 301-редиректом — без явной необходимости
+          массовая смена адресов не нужна, достаточно исправить генерацию новых.
+
+  double_slash:
+    severity: low
+    text:
+      ru:
+        title: Двойной слэш в URL
+        description: Адреса вида `/catalog//item` — признак ошибки в генерации ссылок и источник дублей.
+        recommendation: Исправьте генерацию ссылок и настройте редирект на корректный адрес.
+        fix: |
+          Найдите место конкатенации путей (`base + '/' + path`, где base уже оканчивается на `/`).
+          nginx: `merge_slashes on;` (по умолчанию) и редирект в приложении на нормализованный путь.
+
+  spaces:
+    severity: low
+    text:
+      ru:
+        title: Пробелы в URL
+        description: Пробелы кодируются как `%20`, такие URL некрасивы и часто ломаются при копировании.
+        recommendation: Замените пробелы дефисами в ЧПУ.
+        fix: |
+          Используйте транслитерацию/slugify при генерации адресов: `"Игровые ноутбуки"` → `igrovye-noutbuki`.
+
+  query_params:
+    severity: low
+    text:
+      ru:
+        title: Индексируемые URL с GET-параметрами
+        description: >-
+          Страницы с параметрами (сортировки, фильтры, сессии) доступны для индексации без canonical —
+          это плодит дубли и тратит краулинговый бюджет.
+        recommendation: Укажите canonical на основной URL или закройте параметры от индексации.
+        message: "Параметры: $query"
+        fix: |
+          - Добавьте на такие страницы `<link rel="canonical">` на URL без параметров.
+          - Для Яндекса используйте директиву `Clean-param` в robots.txt:
+          ```text
+          User-agent: Yandex
+          Clean-param: sort&order&utm_source
+          ```
+          - Важные фильтры (бренд, категория) переведите на ЧПУ: `/notebooks/asus/` вместо `?brand=asus`.
