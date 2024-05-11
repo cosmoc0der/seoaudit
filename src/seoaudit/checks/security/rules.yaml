@@ -1,0 +1,261 @@
+category: security
+
+rules:
+  https_missing:
+    severity: critical
+    scope: site
+    refs: [https://developers.google.com/search/docs/appearance/page-experience]
+    text:
+      ru:
+        title: Сайт работает без HTTPS
+        description: >-
+          HTTPS — фактор ранжирования. Браузеры помечают HTTP-сайты как «Не защищён»,
+          что отпугивает посетителей и снижает конверсию.
+        recommendation: Подключите SSL-сертификат и переведите сайт на HTTPS.
+        fix: |
+          1. Выпустите бесплатный сертификат Let's Encrypt: `certbot --nginx -d example.com -d www.example.com`.
+          2. Настройте 301-редирект со всех http:// адресов на https://.
+          3. Замените внутренние ссылки и пути к ресурсам на https://.
+          4. Добавьте https-версию в Google Search Console и Яндекс.Вебмастер.
+
+  http_redirect:
+    severity: high
+    scope: site
+    text:
+      ru:
+        title: HTTP-версия не перенаправляет на HTTPS
+        description: Сайт доступен по http:// без постоянного редиректа — это дубль сайта и риск перехвата трафика.
+        recommendation: Настройте 301-редирект с http:// на https://.
+        message:
+          none: "http:// отвечает $status без редиректа на HTTPS"
+          temporary: "Используется временный редирект $status вместо 301"
+        fix: |
+          ```nginx
+          server {
+            listen 80;
+            server_name example.com www.example.com;
+            return 301 https://example.com$request_uri;
+          }
+          ```
+
+  ssl_invalid:
+    severity: critical
+    scope: site
+    text:
+      ru:
+        title: Недействительный SSL-сертификат
+        description: Браузеры показывают полноэкранное предупреждение, а роботы могут не проиндексировать сайт.
+        recommendation: Установите валидный сертификат с полной цепочкой.
+        message: "$error"
+        fix: |
+          Проверьте сертификат на https://www.ssllabs.com/ssltest/. Типичные причины:
+          истёк срок, сертификат выпущен на другой домен (нет www), не установлена промежуточная
+          цепочка (используйте `fullchain.pem`, а не `cert.pem`).
+
+  ssl_expiring:
+    severity: high
+    scope: site
+    params:
+      min_days: 14
+    text:
+      ru:
+        title: SSL-сертификат скоро истекает
+        description: До окончания срока действия сертификата меньше $min_days дней.
+        recommendation: Продлите сертификат и настройте автопродление.
+        message: "Осталось дней: $days"
+        fix: |
+          Для Let's Encrypt проверьте таймер автопродления: `systemctl list-timers | grep certbot`
+          и тестовый запуск `certbot renew --dry-run`. Настройте мониторинг срока сертификата.
+
+  hsts_missing:
+    severity: medium
+    scope: site
+    refs: [https://developer.mozilla.org/docs/Web/HTTP/Headers/Strict-Transport-Security]
+    text:
+      ru:
+        title: Нет заголовка HSTS
+        description: Strict-Transport-Security запрещает браузеру открывать сайт по HTTP и защищает от атак понижения протокола.
+        recommendation: Добавьте заголовок Strict-Transport-Security.
+        fix: |
+          ```nginx
+          add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+          ```
+          Начните с небольшого max-age (например, 300), убедитесь, что все поддомены работают по HTTPS,
+          затем увеличьте до года.
+
+  csp_missing:
+    severity: medium
+    scope: site
+    refs: [https://developer.mozilla.org/docs/Web/HTTP/CSP]
+    text:
+      ru:
+        title: Нет Content-Security-Policy
+        description: CSP ограничивает источники скриптов и стилей — основная защита от XSS-атак и внедрения чужого кода.
+        recommendation: Настройте политику Content-Security-Policy.
+        fix: |
+          Начните с режима отчётов, чтобы ничего не сломать:
+          ```nginx
+          add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://mc.yandex.ru https://www.googletagmanager.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'" always;
+          ```
+          Соберите нарушения, дополните список разрешённых источников и переключите на
+          `Content-Security-Policy`.
+
+  content_type_options_missing:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: Нет заголовка X-Content-Type-Options
+        description: Без него браузер может «угадывать» тип файла, что открывает возможности для атак через загруженные файлы.
+        recommendation: Добавьте X-Content-Type-Options nosniff.
+        fix: |
+          ```nginx
+          add_header X-Content-Type-Options "nosniff" always;
+          ```
+
+  clickjacking_protection_missing:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: Нет защиты от кликджекинга
+        description: Сайт можно встроить во фрейм на чужом ресурсе и обманом заставить пользователя кликнуть.
+        recommendation: Добавьте X-Frame-Options или CSP frame-ancestors.
+        fix: |
+          ```nginx
+          add_header X-Frame-Options "SAMEORIGIN" always;
+          # или современный вариант:
+          add_header Content-Security-Policy "frame-ancestors 'self'" always;
+          ```
+
+  referrer_policy_missing:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: Нет заголовка Referrer-Policy
+        description: Без политики полный URL (включая параметры) может передаваться сторонним сайтам.
+        recommendation: Добавьте Referrer-Policy.
+        fix: |
+          ```nginx
+          add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+          ```
+
+  permissions_policy_missing:
+    severity: info
+    scope: site
+    text:
+      ru:
+        title: Нет заголовка Permissions-Policy
+        description: Permissions-Policy ограничивает доступ страниц и встроенных фреймов к камере, геолокации и другим API.
+        recommendation: При необходимости добавьте Permissions-Policy.
+        fix: |
+          ```nginx
+          add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+          ```
+
+  server_disclosure:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: Сервер раскрывает версии ПО
+        description: Версии сервера и фреймворка в заголовках упрощают злоумышленникам поиск известных уязвимостей.
+        recommendation: Скройте версии ПО в заголовках ответа.
+        message: "$headers"
+        fix: |
+          ```nginx
+          server_tokens off;
+          ```
+          PHP: `expose_php = Off` в php.ini. Express: `app.disable('x-powered-by')`.
+          ASP.NET: `<httpRuntime enableVersionHeader="false" />`.
+
+  cookies_insecure:
+    severity: medium
+    scope: site
+    text:
+      ru:
+        title: Cookie без флагов безопасности
+        description: >-
+          Cookie без Secure могут передаваться по HTTP, без HttpOnly — читаться скриптами (кража сессии при XSS),
+          без SameSite — использоваться в CSRF-атаках.
+        recommendation: Установите флаги Secure, HttpOnly и SameSite.
+        message: "Cookie «$cookie»: нет $issues"
+        fix: |
+          ```http
+          Set-Cookie: session=abc; Path=/; Secure; HttpOnly; SameSite=Lax
+          ```
+          HttpOnly не ставьте только для cookie, которые действительно должен читать JavaScript.
+
+  mixed_content:
+    severity: high
+    text:
+      ru:
+        title: Смешанный контент (HTTP-ресурсы на HTTPS)
+        description: HTTPS-страница загружает ресурсы по HTTP — браузер блокирует их или помечает страницу как небезопасную.
+        recommendation: Загружайте все ресурсы по HTTPS.
+        message: "Ресурсов: $count (например: $examples)"
+        fix: |
+          Замените `http://` на `https://` в путях к ресурсам (или используйте относительные пути).
+          Временная страховка:
+          ```nginx
+          add_header Content-Security-Policy "upgrade-insecure-requests" always;
+          ```
+
+  target_blank_noopener:
+    severity: info
+    text:
+      ru:
+        title: Внешние ссылки target="_blank" без rel="noopener"
+        description: >-
+          Открытая страница получает доступ к `window.opener` (tabnabbing). Современные браузеры
+          ставят noopener по умолчанию, но старые — нет.
+        recommendation: Добавьте rel="noopener noreferrer" внешним ссылкам с target="_blank".
+        message: "Ссылок: $count (например: $examples)"
+        fix: |
+          ```html
+          <a href="https://partner.com" target="_blank" rel="noopener noreferrer">Партнёр</a>
+          ```
+
+  sensitive_files:
+    severity: critical
+    scope: site
+    params:
+      paths:
+        /.git/HEAD: '^ref: refs/'
+        /.git/config: '^\[core\]'
+        /.svn/entries: '^\d+\s*$'
+        /.env: '^[A-Z][A-Z0-9_]*=\S*'
+        /.env.local: '^[A-Z][A-Z0-9_]*=\S*'
+        /.DS_Store: 'Bud1'
+        /wp-config.php.bak: 'DB_PASSWORD'
+        /wp-config.php~: 'DB_PASSWORD'
+        /config.php.bak: '(password|passwd|db_pass)'
+        /backup.sql: '(CREATE TABLE|INSERT INTO)'
+        /dump.sql: '(CREATE TABLE|INSERT INTO)'
+        /database.sql: '(CREATE TABLE|INSERT INTO)'
+        /phpinfo.php: 'PHP Version'
+        /info.php: 'PHP Version'
+        /server-status: 'Apache Server Status'
+        /.htpasswd: '^[\w.-]+:\S+$'
+        /.vscode/sftp.json: '"password"'
+        /.idea/workspace.xml: '<project'
+        /docker-compose.yml: '^services:'
+    text:
+      ru:
+        title: Доступны служебные файлы
+        description: >-
+          Из интернета доступны файлы, которые могут содержать исходный код, пароли к базе
+          данных или ключи API. Это критическая уязвимость.
+        recommendation: Немедленно закройте доступ к файлам и смените скомпрометированные пароли и ключи.
+        message: "Доступен: $path"
+        fix: |
+          1. Закройте доступ на уровне веб-сервера:
+          ```nginx
+          location ~ /\.(?!well-known) { deny all; }
+          location ~* \.(sql|bak|old|swp|env)$ { deny all; }
+          ```
+          2. Удалите резервные копии и дампы из публичной директории.
+          3. Если был доступен `.git` или `.env` — считайте все секреты скомпрометированными:
+             смените пароли БД, ключи API, токены.
+          4. Деплойте только собранный артефакт, без служебных директорий.
