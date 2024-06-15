@@ -19,6 +19,7 @@ dependencies = [
     "rich>=13.0",
     "protego>=0.2",
     "defusedxml>=0.7",
+    "extruct>=0.13",
 ]
 
 [project.scripts]

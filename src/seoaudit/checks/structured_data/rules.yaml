@@ -1,0 +1,140 @@
+category: structured_data
+
+rules:
+  structured_data_missing:
+    severity: medium
+    scope: site
+    refs: [https://developers.google.com/search/docs/appearance/structured-data/intro-structured-data]
+    text:
+      ru:
+        title: На сайте нет микроразметки Schema.org
+        description: >-
+          Микроразметка помогает поисковикам понять содержимое страниц и даёт расширенные сниппеты:
+          цены, рейтинги, хлебные крошки, FAQ — это заметно повышает CTR.
+        recommendation: Внедрите разметку JSON-LD для ключевых типов страниц.
+        fix: |
+          Добавьте JSON-LD в `<head>` или конец `<body>`. Минимальный набор: Organization на главной,
+          BreadcrumbList на внутренних, Product/Article/LocalBusiness по типу страниц.
+          ```html
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "Компания",
+            "url": "https://example.com",
+            "logo": "https://example.com/logo.png"
+          }
+          </script>
+          ```
+          Проверка: https://search.google.com/test/rich-results и https://validator.schema.org/
+
+  jsonld_invalid:
+    severity: high
+    text:
+      ru:
+        title: Синтаксическая ошибка в JSON-LD
+        description: Блок JSON-LD содержит невалидный JSON и полностью игнорируется поисковиками.
+        recommendation: Исправьте синтаксис JSON в разметке.
+        message: "$error"
+        fix: |
+          Частые ошибки: висячая запятая после последнего элемента, неэкранированные кавычки
+          и переносы строк в значениях, комментарии внутри JSON.
+          Генерируйте JSON-LD сериализатором, а не конкатенацией строк:
+          ```php
+          <script type="application/ld+json"><?= json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+          ```
+          ```python
+          json.dumps(schema, ensure_ascii=False)
+          ```
+
+  schema_required:
+    severity: medium
+    params:
+      required:
+        Organization: [name, url]
+        LocalBusiness: [name, address]
+        Product: [name]
+        Offer: [price, priceCurrency]
+        AggregateRating: [ratingValue]
+        Review: [author, reviewRating]
+        Article: [headline, datePublished, author]
+        NewsArticle: [headline, datePublished, author]
+        BlogPosting: [headline, datePublished, author]
+        BreadcrumbList: [itemListElement]
+        ListItem: [position]
+        FAQPage: [mainEntity]
+        Question: [name, acceptedAnswer]
+        Event: [name, startDate, location]
+        Recipe: [name, image]
+        VideoObject: [name, thumbnailUrl, uploadDate]
+        JobPosting: [title, datePosted, description, hiringOrganization]
+      one_of:
+        Product: [offers, review, aggregateRating]
+    refs: [https://developers.google.com/search/docs/appearance/structured-data/search-gallery]
+    text:
+      ru:
+        title: Неполная микроразметка — нет обязательных свойств
+        description: Без обязательных свойств расширенный сниппет не будет показан, а Search Console покажет ошибку.
+        recommendation: Добавьте обязательные свойства для указанных типов.
+        message: "$type: нет $missing"
+        fix: |
+          Сверьтесь с требованиями Google для конкретного типа (ссылка ниже) и проверьте страницу
+          в https://search.google.com/test/rich-results. Пример Product:
+          ```json
+          {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": "ASUS ROG Strix G16",
+            "image": "https://example.com/rog.jpg",
+            "offers": {
+              "@type": "Offer",
+              "price": "899990",
+              "priceCurrency": "KZT",
+              "availability": "https://schema.org/InStock"
+            }
+          }
+          ```
+
+  organization_missing:
+    severity: low
+    scope: site
+    params:
+      types: [Organization, LocalBusiness, Corporation, Store, OnlineStore, WebSite, Person, NewsMediaOrganization, EducationalOrganization, MedicalOrganization]
+    text:
+      ru:
+        title: На главной нет разметки Organization / WebSite
+        description: Разметка организации помогает поисковикам связать сайт с брендом, логотипом и контактами (Knowledge Graph).
+        recommendation: Добавьте Organization (или LocalBusiness) и WebSite на главную страницу.
+        fix: |
+          ```html
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "Компания",
+            "url": "https://example.com",
+            "logo": "https://example.com/logo.png",
+            "contactPoint": {"@type": "ContactPoint", "telephone": "+7-700-000-00-00", "contactType": "customer service"},
+            "sameAs": ["https://t.me/company", "https://instagram.com/company"]
+          }
+          </script>
+          ```
+
+  breadcrumbs_missing:
+    severity: info
+    text:
+      ru:
+        title: Нет разметки хлебных крошек
+        description: BreadcrumbList заменяет URL в сниппете на понятный путь по разделам сайта.
+        recommendation: Добавьте разметку BreadcrumbList на внутренние страницы.
+        fix: |
+          ```json
+          {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {"@type": "ListItem", "position": 1, "name": "Каталог", "item": "https://example.com/catalog/"},
+              {"@type": "ListItem", "position": 2, "name": "Ноутбуки", "item": "https://example.com/catalog/notebooks/"}
+            ]
+          }
+          ```
