@@ -17,7 +17,7 @@ from seoaudit.core.models import AuditReport, RuleStatus
 from seoaudit.reporting import render_report
 from seoaudit.reporting.data import load_report
 
-app = typer.Typer(help="Modular SEO audit.", no_args_is_help=True, add_completion=False)
+app = typer.Typer(help="Modular SEO audit with PDF reports.", no_args_is_help=True, add_completion=False)
 console = Console()
 
 
@@ -41,7 +41,7 @@ def audit(
     url: Annotated[str, typer.Argument(help="Site URL, e.g. https://example.com")],
     config: ConfigOption = None,
     out: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")] = Path("reports"),
-    formats: Annotated[Optional[list[str]], typer.Option("--format", "-f", help="html, json, csv")] = None,
+    formats: Annotated[Optional[list[str]], typer.Option("--format", "-f", help="pdf, html, json, csv")] = None,
     max_pages: Annotated[Optional[int], typer.Option(help="Crawl limit.")] = None,
     lang: Annotated[Optional[str], typer.Option(help="Report language.")] = None,
     disable: Annotated[Optional[list[str]], typer.Option("--disable", "-d", help="Checks to skip, e.g. pagespeed,html")] = None,
@@ -99,7 +99,7 @@ def render(
 ) -> None:
     """Re-render reports from a saved JSON without re-crawling."""
     cfg = _load(config)
-    _write(load_report(report_json), out, cfg, _split(formats) or ["html"])
+    _write(load_report(report_json), out, cfg, _split(formats) or ["pdf"])
 
 
 @app.command()

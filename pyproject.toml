@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "seoaudit"
 version = "0.1.0"
-description = "Modular SEO audit engine with plugin-based checks"
+description = "Modular SEO audit engine with plugin-based checks and PDF reports"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,6 +20,7 @@ dependencies = [
     "protego>=0.2",
     "defusedxml>=0.7",
     "extruct>=0.13",
+    "playwright>=1.40",
 ]
 
 [project.scripts]

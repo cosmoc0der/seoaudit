@@ -65,7 +65,7 @@ class RuleOverride(BaseModel):
 
 
 class ReportConfig(BaseModel):
-    formats: list[str] = Field(default_factory=lambda: ["html", "json"])
+    formats: list[str] = Field(default_factory=lambda: ["pdf", "json"])
     max_urls_per_rule: int = 10
     include_passed: bool = True
     meta: ReportMeta = Field(default_factory=ReportMeta)

@@ -8,6 +8,7 @@ from seoaudit.core.config import ReportConfig
 from seoaudit.core.models import AuditReport
 from seoaudit.reporting.data import write_csv, write_json
 from seoaudit.reporting.html import write_html
+from seoaudit.reporting.pdf import write_pdf
 
 Writer = Callable[[AuditReport, Path, ReportConfig], None]
 
@@ -15,6 +16,7 @@ WRITERS: dict[str, tuple[str, Writer]] = {
     "json": ("json", write_json),
     "csv": ("csv", write_csv),
     "html": ("html", write_html),
+    "pdf": ("pdf", write_pdf),
 }
 
 
