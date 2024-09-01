@@ -1,0 +1,74 @@
+category: international
+
+rules:
+  invalid_code:
+    severity: medium
+    params:
+      known_mistakes: [en-uk, jp, ua, cn, kz, gr, dk, cz, by, eng, rus]
+    refs: [https://developers.google.com/search/docs/specialty/international/localized-versions]
+    text:
+      ru:
+        title: Некорректный код языка в hreflang
+        description: Код языка должен быть в формате ISO 639-1 (и опционально регион ISO 3166-1). Неверные коды игнорируются.
+        recommendation: Исправьте коды языков и регионов.
+        message: "Коды: $codes"
+        fix: |
+          Частые ошибки: `en-uk` → `en-gb`, `jp` → `ja`, `ua` → `uk`, `kz` → `kk` (казахский) или `ru-kz`
+          (русский для Казахстана), `cn` → `zh-cn`.
+          ```html
+          <link rel="alternate" hreflang="ru-kz" href="https://example.kz/ru/">
+          <link rel="alternate" hreflang="kk" href="https://example.kz/kk/">
+          ```
+
+  no_self_reference:
+    severity: low
+    text:
+      ru:
+        title: hreflang не ссылается на саму страницу
+        description: Набор hreflang должен включать ссылку на текущую страницу с её собственным языком.
+        recommendation: Добавьте самоссылающийся hreflang.
+        fix: |
+          На каждой языковой версии выводите полный одинаковый набор ссылок, включая текущую:
+          ```html
+          <link rel="alternate" hreflang="ru" href="https://example.com/ru/page/">
+          <link rel="alternate" hreflang="en" href="https://example.com/en/page/">
+          <link rel="alternate" hreflang="x-default" href="https://example.com/en/page/">
+          ```
+
+  no_x_default:
+    severity: info
+    text:
+      ru:
+        title: Нет hreflang x-default
+        description: x-default указывает версию для пользователей, язык которых не совпал ни с одной из версий.
+        recommendation: Добавьте x-default, указывающий на основную или языковую страницу выбора.
+        fix: |
+          ```html
+          <link rel="alternate" hreflang="x-default" href="https://example.com/">
+          ```
+
+  no_return_link:
+    severity: medium
+    text:
+      ru:
+        title: Нет обратной ссылки hreflang
+        description: Если страница A ссылается на B через hreflang, B должна ссылаться на A. Иначе связь игнорируется.
+        recommendation: Обеспечьте взаимные ссылки hreflang между всеми языковыми версиями.
+        message: "$lang → $target не ссылается обратно"
+        fix: |
+          Генерируйте блок hreflang из единого источника (таблица соответствий переводов),
+          чтобы все версии выводили одинаковый полный набор ссылок.
+
+  broken_target:
+    severity: medium
+    params:
+      max_probes: 200
+    text:
+      ru:
+        title: hreflang ведёт на недоступную страницу или редирект
+        description: Альтернативные версии должны отвечать 200 без редиректов, иначе связь игнорируется.
+        recommendation: Укажите в hreflang рабочие конечные URL.
+        message: "$lang → $target (ответ: $status)"
+        fix: |
+          Проверьте, что переведённая версия существует, и укажите её канонический URL
+          (протокол, www, слэш на конце — как в canonical целевой страницы).
