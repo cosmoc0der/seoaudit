@@ -1,0 +1,148 @@
+category: performance
+
+options:
+  max_static_resources: 300
+
+rules:
+  ttfb_slow:
+    severity: medium
+    params:
+      max_ms: 600
+    refs: [https://web.dev/articles/ttfb]
+    text:
+      ru:
+        title: Медленный ответ сервера (TTFB)
+        description: >-
+          Время до первого байта превышает $max_ms мс. Медленный сервер задерживает всю загрузку
+          страницы и снижает частоту сканирования роботами.
+        recommendation: Сократите TTFB до $max_ms мс и меньше.
+        message: "TTFB: $ttfb мс"
+        fix: |
+          - Включите серверное кэширование страниц (FastCGI cache, Varnish, Redis, кэш CMS).
+          - Найдите медленные SQL-запросы (slow query log), добавьте индексы.
+          - Включите OPcache (PHP) / прогрев приложения, обновите версию рантайма.
+          - Используйте CDN с кэшированием HTML для анонимных пользователей.
+          - Проверьте ресурсы хостинга (CPU, RAM, I/O) — возможно, нужен апгрейд.
+
+  html_too_large:
+    severity: low
+    params:
+      max_kb: 500
+    text:
+      ru:
+        title: Слишком большой размер HTML
+        description: HTML-документ больше $max_kb КБ дольше загружается и парсится, особенно на мобильных.
+        recommendation: Уменьшите размер HTML до $max_kb КБ.
+        message: "Размер HTML: $size_kb КБ"
+        fix: |
+          Вынесите инлайн-скрипты, стили и SVG во внешние файлы, уберите встроенные base64-картинки,
+          сократите объём JSON-состояния (`__NEXT_DATA__`, `window.__INITIAL_STATE__`),
+          используйте пагинацию для длинных списков.
+
+  compression_missing:
+    severity: medium
+    refs: [https://developer.mozilla.org/docs/Web/HTTP/Compression]
+    text:
+      ru:
+        title: Не включено сжатие HTML
+        description: Сервер отдаёт HTML без gzip/brotli — объём передачи больше в 3–5 раз.
+        recommendation: Включите сжатие brotli или gzip на сервере.
+        message: "Размер без сжатия: $size_kb КБ"
+        fix: |
+          nginx:
+          ```nginx
+          gzip on;
+          gzip_comp_level 5;
+          gzip_types text/html text/css application/javascript application/json image/svg+xml;
+          # brotli (модуль ngx_brotli):
+          brotli on;
+          brotli_types text/html text/css application/javascript application/json image/svg+xml;
+          ```
+          Apache: модули `mod_deflate` / `mod_brotli`.
+
+  static_compression_missing:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: Статические файлы отдаются без сжатия
+        description: CSS, JS и SVG отдаются без gzip/brotli, что увеличивает время загрузки.
+        recommendation: Включите сжатие для текстовых статических файлов.
+        message: "Тип: $type"
+        fix: |
+          Добавьте типы в `gzip_types`/`brotli_types` (nginx) или включите сжатие на CDN.
+          Для сборки фронтенда можно заранее генерировать `.br` и `.gz` версии и включить
+          `gzip_static on;` / `brotli_static on;`.
+
+  cache_missing:
+    severity: low
+    scope: site
+    params:
+      min_seconds: 604800
+    refs: [https://web.dev/articles/http-cache]
+    text:
+      ru:
+        title: Не настроено кэширование статики
+        description: >-
+          Статические ресурсы кэшируются менее чем на 7 дней ($min_seconds с) или не кэшируются вовсе —
+          при каждом визите браузер скачивает их заново.
+        recommendation: Настройте долгосрочное кэширование статики с версионированием имён файлов.
+        message: "Cache-Control: $cache"
+        fix: |
+          nginx:
+          ```nginx
+          location ~* \.(css|js|woff2|webp|avif|jpg|png|svg)$ {
+            expires 1y;
+            add_header Cache-Control "public, max-age=31536000, immutable";
+          }
+          ```
+          Используйте хэш в именах файлов (`app.3f9a1c.js`) — сборщики (Vite, Webpack) делают это
+          автоматически, тогда обновления не застрянут в кэше.
+
+  render_blocking_scripts:
+    severity: low
+    refs: [https://web.dev/articles/efficiently-load-third-party-javascript]
+    text:
+      ru:
+        title: Блокирующие скрипты в head
+        description: Скрипты в `<head>` без async/defer блокируют отрисовку страницы до своей загрузки и выполнения.
+        recommendation: Добавьте defer (или async для независимых скриптов) либо перенесите их в конец body.
+        message: "Скриптов: $count (например: $examples)"
+        fix: |
+          ```html
+          <script src="/js/app.js" defer></script>      <!-- порядок выполнения сохраняется -->
+          <script src="https://counter.example/tag.js" async></script>  <!-- независимые счётчики -->
+          ```
+
+  too_many_resources:
+    severity: low
+    params:
+      max_resources: 40
+    text:
+      ru:
+        title: Слишком много подключаемых JS/CSS файлов
+        description: Более $max_resources внешних скриптов и стилей на странице увеличивают число запросов и время загрузки.
+        recommendation: Объедините и сократите количество подключаемых файлов.
+        message: "Файлов JS/CSS: $count"
+        fix: |
+          Соберите ресурсы бандлером (Vite, Webpack, esbuild), удалите неиспользуемые библиотеки
+          и плагины, подключайте тяжёлые виджеты (чаты, карты) только по взаимодействию.
+
+  http2_missing:
+    severity: low
+    scope: site
+    text:
+      ru:
+        title: Сервер не поддерживает HTTP/2
+        description: HTTP/2 загружает ресурсы параллельно в одном соединении, ускоряя загрузку страниц.
+        recommendation: Включите HTTP/2 (или HTTP/3) на веб-сервере или CDN.
+        message: "Протокол: $version"
+        fix: |
+          nginx (1.25.1+):
+          ```nginx
+          server {
+            listen 443 ssl;
+            http2 on;
+          }
+          ```
+          Для старых версий nginx: `listen 443 ssl http2;`.
