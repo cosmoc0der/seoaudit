@@ -1,0 +1,79 @@
+category: html
+
+options:
+  validator_url: https://validator.w3.org/nu/   # self-hosted vnu: http://localhost:8888/
+  validator_pages: 5
+  validator_delay: 1.0
+
+rules:
+  doctype_missing:
+    severity: medium
+    text:
+      ru:
+        title: Отсутствует DOCTYPE
+        description: Без `<!DOCTYPE html>` браузер включает режим совместимости (quirks mode) — вёрстка может отображаться некорректно.
+        recommendation: Добавьте `<!DOCTYPE html>` первой строкой документа.
+        fix: |
+          ```html
+          <!DOCTYPE html>
+          <html lang="ru">
+          ```
+          Перед DOCTYPE не должно быть пробелов, BOM или вывода PHP/шаблонизатора.
+
+  duplicate_ids:
+    severity: low
+    text:
+      ru:
+        title: Повторяющиеся id элементов
+        description: Атрибут id должен быть уникальным. Дубли ломают якорные ссылки, JS-обработчики и связи label/input.
+        recommendation: Сделайте id уникальными.
+        message: "Повторяющихся id: $count (например: $examples)"
+        fix: |
+          Обычно дубли возникают в циклах шаблонов и повторно используемых компонентах.
+          Добавьте к id уникальный суффикс (`product-{{ id }}`) или используйте классы для стилей.
+
+  deprecated_tags:
+    severity: low
+    params:
+      tags: [font, center, marquee, blink, frame, frameset, big, strike, tt, acronym, basefont, dir]
+    text:
+      ru:
+        title: Устаревшие HTML-теги
+        description: Устаревшие теги не поддерживаются стандартом HTML5 и могут некорректно обрабатываться.
+        recommendation: Замените устаревшие теги на семантическую разметку и CSS.
+        message: "Найдено: $found"
+        fix: |
+          - `<font>`, `<center>`, `<big>` → CSS (`font-size`, `text-align: center`).
+          - `<strike>` → `<s>` или `<del>`; `<acronym>` → `<abbr>`; `<tt>` → `<code>`.
+          - `<frame>`/`<frameset>` → обычная вёрстка; `<marquee>` → CSS-анимация.
+          Часто такие теги приходят из WYSIWYG-редакторов — настройте очистку HTML при сохранении.
+
+  obsolete_plugins:
+    severity: medium
+    text:
+      ru:
+        title: Используются устаревшие плагины (Flash, Java, Silverlight)
+        description: Браузеры больше не поддерживают эти технологии — контент не виден ни пользователям, ни роботам.
+        recommendation: Замените плагины на HTML5 (video, canvas, SVG).
+        message: "Элементов: $count"
+        fix: |
+          Перекодируйте видео в MP4/WebM и используйте `<video>`, анимации переведите на CSS/SVG/Canvas.
+
+  w3c_errors:
+    severity: low
+    params:
+      max_errors: 10
+    refs: [https://validator.w3.org/nu/]
+    text:
+      ru:
+        title: Ошибки валидации HTML (W3C)
+        description: >-
+          Валидатор W3C нашёл более $max_errors ошибок разметки. Грубые ошибки (незакрытые теги,
+          неверная вложенность) могут исказить то, как робот видит контент страницы.
+        recommendation: Исправьте ошибки разметки, начиная с незакрытых тегов и неверной вложенности.
+        message: "Ошибок: $count. $examples"
+        fix: |
+          Проверьте страницу на https://validator.w3.org/nu/ и исправьте ошибки в шаблонах.
+          Приоритет: незакрытые/лишние теги, блочные элементы внутри `<p>` и `<a>`,
+          дубли атрибутов, элементы `<head>` внутри `<body>`.
+          Предупреждения и мелкие несоответствия на ранжирование практически не влияют.
