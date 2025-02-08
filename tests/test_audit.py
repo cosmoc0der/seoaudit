@@ -9,7 +9,7 @@ from seoaudit.core.models import AuditReport, RuleStatus
 from seoaudit.core.urls import normalize_url, pretty_url
 from seoaudit.reporting.html import plural, render_html
 
-OFFLINE = {"checks": {"html": {"options": {"validator_pages": 0}}}}
+OFFLINE = {"checks": {"pagespeed": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}}
 
 
 def run(transport, **config) -> AuditReport:

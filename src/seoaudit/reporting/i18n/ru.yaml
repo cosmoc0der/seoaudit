@@ -30,6 +30,7 @@ notes:
   not_https: сайт работает без HTTPS
   port_80_closed: HTTP-порт 80 закрыт
   validator_unavailable: валидатор W3C недоступен
+  pagespeed_quota: "исчерпана квота PageSpeed API — укажите ключ (options.api_key или PAGESPEED_API_KEY)"
   findings_truncated: список находок сокращён
 other_checks: Не применимо / пропущено
 checks_total: проверок

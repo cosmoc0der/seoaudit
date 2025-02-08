@@ -1,0 +1,121 @@
+category: performance
+
+options:
+  api_key: null          # or env PAGESPEED_API_KEY; without a key Google applies a tiny quota
+  strategies: [mobile]   # mobile, desktop
+  max_pages: 3
+  concurrency: 2
+  timeout: 120
+
+rules:
+  performance_score:
+    severity: high
+    scope: site
+    params:
+      min_score: 50
+    refs: [https://developer.chrome.com/docs/lighthouse/performance/performance-scoring]
+    text:
+      ru:
+        title: Низкая оценка производительности Lighthouse
+        description: >-
+          Оценка производительности ниже $min_score/100. Lighthouse учитывает скорость отрисовки,
+          интерактивность и стабильность вёрстки — это напрямую связано с Core Web Vitals.
+        recommendation: Выполните рекомендации Lighthouse, начиная с тех, что дают наибольшую экономию времени.
+        message: "$strategy: $score/100. Главные резервы: $opportunities"
+        fix: |
+          Запустите отчёт на https://pagespeed.web.dev/ для страницы из списка и пройдите по разделу
+          «Возможности» сверху вниз. Типовые решения:
+          - сжать и конвертировать изображения в WebP/AVIF, задать размеры;
+          - отложить неиспользуемый JS (`defer`, code splitting, удаление лишних библиотек);
+          - встроить критический CSS, остальной загрузить асинхронно;
+          - подключить шрифты с `font-display: swap` и `preload`;
+          - включить кэширование и CDN.
+
+  lcp_slow:
+    severity: high
+    scope: site
+    params:
+      max_ms: 2500
+    refs: [https://web.dev/articles/lcp]
+    text:
+      ru:
+        title: Медленная отрисовка основного контента (LCP)
+        description: Largest Contentful Paint больше $max_ms мс — пользователь долго ждёт появления главного контента.
+        recommendation: Ускорьте загрузку LCP-элемента до $max_ms мс.
+        message: "$strategy: LCP $value мс"
+        fix: |
+          ```html
+          <!-- Главное изображение первого экрана -->
+          <link rel="preload" as="image" href="/hero.webp" fetchpriority="high">
+          <img src="/hero.webp" fetchpriority="high" width="1200" height="600" alt="...">
+          ```
+          - Не используйте `loading="lazy"` для LCP-изображения.
+          - Сократите TTFB (кэширование, CDN).
+          - Уберите блокирующие CSS/JS из `<head>`.
+
+  cls_high:
+    severity: medium
+    scope: site
+    params:
+      max_value: 0.1
+    refs: [https://web.dev/articles/cls]
+    text:
+      ru:
+        title: Сдвиги макета при загрузке (CLS)
+        description: Cumulative Layout Shift больше $max_value — элементы страницы «прыгают» при загрузке.
+        recommendation: Зарезервируйте место под изображения, баннеры, шрифты и динамические блоки.
+        message: "$strategy: CLS $value"
+        fix: |
+          - Задавайте `width`/`height` или `aspect-ratio` изображениям, видео и iframe.
+          - Резервируйте место под рекламу и баннеры (`min-height`).
+          - Не вставляйте контент поверх существующего (cookie-баннеры — `position: fixed`).
+          - Шрифты: `font-display: optional` или `size-adjust` для фолбэка.
+
+  tbt_high:
+    severity: medium
+    scope: site
+    params:
+      max_ms: 200
+    refs: [https://web.dev/articles/tbt]
+    text:
+      ru:
+        title: Долгая блокировка основного потока (TBT)
+        description: Total Blocking Time больше $max_ms мс — тяжёлый JavaScript мешает странице реагировать на действия (влияет на INP).
+        recommendation: Сократите объём и время выполнения JavaScript.
+        message: "$strategy: TBT $value мс"
+        fix: |
+          - Разделите бандл (code splitting), грузите код по маршрутам.
+          - Отложите сторонние скрипты (чаты, счётчики, виджеты) до взаимодействия или `requestIdleCallback`.
+          - Разбивайте долгие задачи (> 50 мс) через `scheduler.yield()` / `setTimeout`.
+          - Удалите неиспользуемые полифилы и библиотеки.
+
+  field_cwv:
+    severity: high
+    scope: site
+    refs: [https://web.dev/articles/vitals]
+    text:
+      ru:
+        title: Core Web Vitals реальных пользователей не в норме
+        description: >-
+          По данным Chrome UX Report (реальные посетители за 28 дней) метрики не соответствуют
+          «хорошему» уровню. Именно эти данные Google использует в ранжировании.
+        recommendation: Улучшите метрики, отмеченные как AVERAGE/SLOW.
+        message: "$strategy: $metrics"
+        fix: |
+          Ориентиры «хорошего» уровня (75-й перцентиль): LCP ≤ 2,5 с, INP ≤ 200 мс, CLS ≤ 0,1.
+          Отслеживайте динамику в Google Search Console → «Основные интернет-показатели».
+          Изменения в полевых данных видны с задержкой до 28 дней.
+
+  lighthouse_seo:
+    severity: medium
+    scope: site
+    category: indexability
+    text:
+      ru:
+        title: Проблемы, найденные Lighthouse SEO
+        description: Lighthouse обнаружил базовые SEO-проблемы при рендеринге страницы в браузере.
+        recommendation: Исправьте перечисленные проблемы.
+        message: "$strategy: $audits"
+        fix: |
+          Откройте отчёт на https://pagespeed.web.dev/ → раздел «Поисковая оптимизация» —
+          для каждого пункта есть ссылка на документацию с инструкцией.
