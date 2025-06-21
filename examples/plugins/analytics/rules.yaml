@@ -1,0 +1,26 @@
+category: analytics
+
+categories:
+  analytics:
+    weight: 0.3
+    text:
+      ru:
+        name: Аналитика
+        description: Наличие счётчиков для измерения трафика и эффективности SEO.
+
+rules:
+  counter_missing:
+    severity: medium
+    params:
+      counters:
+        Яндекс.Метрика: mc.yandex.ru/metrika
+        Google Analytics: googletagmanager.com
+    text:
+      ru:
+        title: На странице нет счётчика аналитики
+        description: Без счётчика вы не увидите трафик страницы и не сможете оценить эффект от SEO-работ.
+        recommendation: Установите счётчик в общий шаблон сайта.
+        message: "Не найден ни один из: $expected"
+        fix: |
+          Вставьте код счётчика Яндекс.Метрики / Google Tag Manager в общий layout,
+          чтобы он выводился на всех страницах.
