@@ -1,0 +1,64 @@
+# Copy to config.yaml and pass with: seoaudit audit https://site.ru -c config.yaml
+# All keys are optional; omitted ones fall back to defaults.
+# Full list of rules with current params: seoaudit rules -c config.yaml
+
+lang: ru
+
+crawl:
+  max_pages: 300
+  max_depth: 10
+  concurrency: 8
+  timeout: 20
+  delay: 0                 # seconds between requests per worker
+  device: mobile           # mobile (as Googlebot Smartphone) or desktop
+  # user_agent: "..."      # overrides the device preset
+  robots_agent: Googlebot  # robots.txt rules are evaluated for this agent
+  respect_robots: true
+  use_sitemap: true
+  include_subdomains: false
+  exclude:                 # regexes
+    - /bitrix/
+    - \?print=
+  strip_params: [utm_*, gclid, yclid, fbclid]
+
+report:
+  formats: [pdf, json, csv]
+  max_urls_per_rule: 10
+  include_passed: true
+  meta:
+    title: SEO-аудит сайта
+    author: Digital Agency
+    logo: ./logo.png
+
+# Check plugins: enable/disable and set options
+checks:
+  pagespeed:
+    enabled: true
+    options:
+      api_key: null        # or env PAGESPEED_API_KEY
+      strategies: [mobile, desktop]
+      max_pages: 3
+  html:
+    options:
+      validator_pages: 5
+      validator_url: https://validator.w3.org/nu/
+  # security:
+  #   enabled: false
+
+# Rule overrides: enabled, severity, category, params
+rules:
+  images.too_large:
+    params:
+      max_kb: 500
+  meta.title_length:
+    params:
+      min_length: 20
+      max_length: 70
+  meta.twitter_card_missing:
+    enabled: false
+  security.csp_missing:
+    severity: low
+
+# Local plugin directories: every subfolder with __init__.py + rules.yaml is a check
+plugin_paths:
+  - ./examples/plugins
