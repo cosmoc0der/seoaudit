@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -14,11 +15,18 @@ from seoaudit.core.config import AuditConfig, ConfigError, load_config
 from seoaudit.core.engine import AuditError, Auditor
 from seoaudit.core.events import Event, EventType
 from seoaudit.core.models import AuditReport, RuleStatus
-from seoaudit.reporting import render_report
+from seoaudit.reporting import WRITERS, render_report, unavailable_formats
 from seoaudit.reporting.data import load_report
 
 app = typer.Typer(help="Modular SEO audit with PDF reports.", no_args_is_help=True, add_completion=False)
 console = Console()
+
+@app.callback()
+def _main() -> None:
+    # Piped output on Windows uses the ANSI code page, where symbols like ✓ would crash rich.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
 
 
 ConfigOption = Annotated[Optional[Path], typer.Option("--config", "-c", help="YAML config file.")]
@@ -55,7 +63,7 @@ def audit(
         "checks": {check: {"enabled": False} for check in _split(disable)} or None,
     }
     cfg = _load(config, **overrides)
-    formats = _split(formats) or cfg.report.formats
+    formats = _formats(_split(formats), cfg.report.formats)
 
     with Progress(
         SpinnerColumn(),
@@ -99,7 +107,7 @@ def render(
 ) -> None:
     """Re-render reports from a saved JSON without re-crawling."""
     cfg = _load(config)
-    _write(load_report(report_json), out, cfg, _split(formats) or ["pdf"])
+    _write(load_report(report_json), out, cfg, _formats(_split(formats), ["pdf"]))
 
 
 @app.command()
@@ -138,6 +146,25 @@ def checks(config: ConfigOption = None) -> None:
         enabled = cfg.check(plan.cls.id).enabled
         table.add_row(plan.cls.id, plan.cls.__module__, str(len(plan.active_rules)), "yes" if enabled else "[red]no")
     console.print(table)
+
+
+def _formats(explicit: list[str], default: list[str]) -> list[str]:
+    """Checked before crawling so a missing dependency doesn't surface after a long audit.
+    Explicitly requested formats must be available; defaults degrade to HTML instead."""
+    formats = explicit or default
+    unknown = set(formats) - set(WRITERS)
+    if unknown:
+        console.print(f"[red]Unknown report formats: {', '.join(sorted(unknown))}. Available: {', '.join(WRITERS)}[/]")
+        raise typer.Exit(2)
+    missing = unavailable_formats(formats)
+    if not missing:
+        return formats
+    hints = "; ".join(missing.values())
+    if explicit:
+        console.print(f"[red]{hints}[/]")
+        raise typer.Exit(2)
+    console.print(f"[yellow]{hints}. Writing HTML instead.[/]")
+    return list(dict.fromkeys("html" if f in missing else f for f in formats))
 
 
 def _write(report: AuditReport, out: Path, cfg: AuditConfig, formats: list[str]) -> None:

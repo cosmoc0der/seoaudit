@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from html import escape
+from importlib.util import find_spec
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from seoaudit.core.config import ReportConfig
 from seoaudit.core.models import AuditReport
 from seoaudit.reporting.html import render_html
+
+INSTALL_HINT = 'PDF needs Playwright: pip install "seoaudit[browser]" && playwright install --only-shell chromium'
 
 _FOOTER = """
 <div style="width:100%;font-size:8px;color:#94a3b8;padding:0 14mm;display:flex;justify-content:space-between;
@@ -15,6 +18,10 @@ _FOOTER = """
   <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
 </div>
 """
+
+
+def pdf_available() -> bool:
+    return find_spec("playwright") is not None
 
 
 def write_pdf(report: AuditReport, path: Path, config: ReportConfig) -> None:

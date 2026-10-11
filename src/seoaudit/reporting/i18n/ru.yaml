@@ -31,6 +31,9 @@ notes:
   port_80_closed: HTTP-порт 80 закрыт
   validator_unavailable: валидатор W3C недоступен
   pagespeed_quota: "исчерпана квота PageSpeed API — укажите ключ (options.api_key или PAGESPEED_API_KEY)"
+  lighthouse_unavailable: "Lighthouse недоступен — установите Node.js 22+ или укажите ключ PageSpeed API (PAGESPEED_API_KEY)"
+  no_field_data: "в Chrome UX Report недостаточно данных реальных пользователей — у сайта мало трафика из Chrome"
+  field_data_local: "данные реальных пользователей приходят только из PageSpeed API — укажите ключ (PAGESPEED_API_KEY)"
   findings_truncated: список находок сокращён
 other_checks: Не применимо / пропущено
 checks_total: проверок

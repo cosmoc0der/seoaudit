@@ -31,6 +31,9 @@ notes:
   port_80_closed: HTTP port 80 is closed
   validator_unavailable: W3C validator is unavailable
   pagespeed_quota: "PageSpeed API quota exceeded — set options.api_key or PAGESPEED_API_KEY"
+  lighthouse_unavailable: "Lighthouse is unavailable — install Node.js 22+ or set a PageSpeed API key (PAGESPEED_API_KEY)"
+  no_field_data: "not enough real-user data in Chrome UX Report — the site gets little Chrome traffic"
+  field_data_local: "real-user data comes only from the PageSpeed API — set a key (PAGESPEED_API_KEY)"
   findings_truncated: findings list truncated
 other_checks: Not applicable / skipped
 checks_total: checks

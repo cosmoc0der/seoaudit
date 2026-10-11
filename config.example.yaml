@@ -35,6 +35,7 @@ checks:
   pagespeed:
     enabled: true
     options:
+      provider: auto       # auto | api | local (Lighthouse via Node.js, no key needed)
       api_key: null        # or env PAGESPEED_API_KEY
       strategies: [mobile, desktop]
       max_pages: 3

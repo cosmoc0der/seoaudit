@@ -6,7 +6,16 @@ from typing import Any
 
 from seoaudit.core.check import Check
 
-_API = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+from .runners import (
+    LighthouseError,
+    LighthouseUnavailable,
+    Measurement,
+    PsiRunner,
+    QuotaError,
+    Runner,
+    create_local_runner,
+    node_available,
+)
 
 _FIELD_METRICS = {
     "LARGEST_CONTENTFUL_PAINT_MS": "LCP",
@@ -15,23 +24,29 @@ _FIELD_METRICS = {
 }
 
 
-class QuotaError(RuntimeError):
-    pass
-
-
 class PageSpeedCheck(Check):
-    """Lighthouse lab data and CrUX field data via the PageSpeed Insights API."""
+    """Lighthouse lab data via the PageSpeed Insights API or a local Lighthouse, plus CrUX field data."""
 
     id = "pagespeed"
 
     async def check_site(self) -> None:
-        jobs = [(url, strategy) for url in self._sample_urls() for strategy in self.options["strategies"]]
-        semaphore = asyncio.Semaphore(self.options["concurrency"])
+        try:
+            runner = await self._runner()
+        except LighthouseUnavailable as exc:
+            self.ctx.diagnostics.append(f"pagespeed: {exc}")
+            self._mark_all(self.skip, "lighthouse_unavailable")
+            return
 
-        async def run(url: str, strategy: str) -> dict[str, Any] | Exception:
+        jobs = [(url, strategy) for url in self._sample_urls() for strategy in self.options["strategies"]]
+        semaphore = asyncio.Semaphore(runner.concurrency)
+
+        async def run(url: str, strategy: str) -> Measurement | Exception:
             async with semaphore:
                 try:
-                    return await self._fetch(url, strategy)
+                    measurement = await runner.run(url, strategy)
+                    if error := measurement.lighthouse.get("runtimeError"):
+                        raise LighthouseError(f"{error.get('code')}: {error.get('message')}")
+                    return measurement
                 except Exception as exc:
                     return exc
 
@@ -39,36 +54,32 @@ class PageSpeedCheck(Check):
         errors = [r for r in results if isinstance(r, Exception)]
         for (url, strategy), error in zip(jobs, results):
             if isinstance(error, Exception):
-                self.ctx.diagnostics.append(f"pagespeed: {strategy} {url}: {error}")
+                self.ctx.diagnostics.append(f"pagespeed: {runner.name} {strategy} {url}: {error}")
         if len(errors) == len(results):
             if any(isinstance(e, QuotaError) for e in errors):
                 self._mark_all(self.skip, "pagespeed_quota")
             else:
-                self._mark_all(self.error, str(errors[0]))
+                self._mark_all(self.error, f"{runner.name}: {errors[0]}")
             return
 
         has_field = False
         for (url, strategy), data in zip(jobs, results):
             if not isinstance(data, Exception):
-                self._evaluate(url, strategy, data.get("lighthouseResult") or {})
-                has_field |= self._evaluate_field(url, strategy, data.get("loadingExperience") or {})
+                self._evaluate(url, strategy, data.lighthouse)
+                has_field |= self._evaluate_field(url, strategy, data.field)
         if not has_field:
-            self.not_applicable("field_cwv")
+            self.not_applicable("field_cwv", "no_field_data" if runner.has_field_data else "field_data_local")
 
-    async def _fetch(self, url: str, strategy: str) -> dict[str, Any]:
-        lang = self.ctx.config.lang
-        params = [("url", url), ("strategy", strategy), ("locale", lang), ("category", "performance"), ("category", "seo")]
-        if key := self.options.get("api_key") or os.environ.get("PAGESPEED_API_KEY"):
-            params.append(("key", key))
-        response = await self.ctx.client.get(_API, params=params, timeout=self.options["timeout"])
-        if response.status_code != 200:
-            try:
-                message = response.json()["error"]["message"]
-            except Exception:
-                message = response.text[:200]
-            error = QuotaError if response.status_code == 429 else RuntimeError
-            raise error(f"HTTP {response.status_code}: {message}")
-        return response.json()
+    async def _runner(self) -> Runner:
+        provider = self.options["provider"]
+        key = self.options.get("api_key") or os.environ.get("PAGESPEED_API_KEY")
+        if provider == "auto":
+            provider = "api" if key or not node_available() else "local"
+        if provider == "local":
+            return await create_local_runner(self.options, self.ctx.config.lang)
+        if provider == "api":
+            return PsiRunner(self.ctx.client, key, self.ctx.config.lang, self.options["timeout"], self.options["concurrency"])
+        raise LighthouseUnavailable(f"Unknown provider '{provider}', expected auto, api or local")
 
     def _mark_all(self, mark, note: str) -> None:
         for rule in self.rules:
@@ -125,10 +136,14 @@ class PageSpeedCheck(Check):
 
 
 def _opportunities(audits: dict[str, Any], limit: int = 5) -> list[str]:
-    found = [
-        (audit["title"], audit["details"]["overallSavingsMs"])
-        for audit in audits.values()
-        if (audit.get("details") or {}).get("type") == "opportunity" and audit["details"].get("overallSavingsMs", 0) > 100
-    ]
-    found.sort(key=lambda item: item[1], reverse=True)
-    return [f"{title} (−{ms / 1000:.1f} с)" for title, ms in found[:limit]]
+    # Lighthouse 13 moved most opportunities into insight audits that report metricSavings instead.
+    savings = {}
+    for audit in audits.values():
+        if audit.get("score") is None or audit["score"] >= 0.9:
+            continue
+        metric = audit.get("metricSavings") or {}
+        ms = (audit.get("details") or {}).get("overallSavingsMs") or max(metric.get("LCP", 0), metric.get("FCP", 0))
+        if ms > 100:
+            savings[audit["title"]] = max(ms, savings.get(audit["title"], 0))
+    top = sorted(savings.items(), key=lambda item: item[1], reverse=True)[:limit]
+    return [f"{title} (−{ms / 1000:.1f} с)" for title, ms in top]

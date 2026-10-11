@@ -14,9 +14,13 @@
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
-pip install -e ".[dev]"
-playwright install chromium        # для PDF
+pip install -e ".[browser,dev]"
+playwright install --only-shell chromium   # Chromium без окна: PDF и локальный Lighthouse
 ```
+
+Extra `browser` (Playwright) нужен только для PDF. Без него аудит работает и выдаёт HTML, JSON и CSV.
+Если PDF стоит в форматах по умолчанию, вместо него будет записан HTML. Если PDF запрошен явно
+(`-f pdf`), CLI сразу, ещё до сканирования, подскажет, что установить.
 
 ## Использование
 
@@ -28,6 +32,24 @@ seoaudit render reports/example.com-20250905-1200.json -f pdf   # переген
 seoaudit rules                                              # все правила с текущими порогами
 seoaudit checks                                             # подключённые модули
 ```
+
+### Скорость: PageSpeed API или локальный Lighthouse
+
+Модуль `pagespeed` берёт данные Lighthouse из одного из двух источников (`checks.pagespeed.options.provider`):
+
+| | `api` — PageSpeed Insights | `local` — Lighthouse на этой машине |
+|---|---|---|
+| Что нужно | бесплатный ключ `PAGESPEED_API_KEY` | Node.js 22+ |
+| Данные реальных пользователей (CrUX) | есть | нет, правило `field_cwv` помечается «неприменимо» |
+| Закрытые сайты (staging, localhost, VPN) | нет | да |
+| Скорость | несколько страниц параллельно | ~25 с на страницу, строго по очереди |
+| Стабильность оценок | одинаковые серверы Google | зависит от загрузки машины |
+
+По умолчанию `provider: auto`: при наличии ключа используется API, иначе локальный Lighthouse.
+Lighthouse ищется в глобальной установке (`npm i -g lighthouse`). Если его там нет, при первом
+запуске он ставится в `~/.cache/seoaudit/lighthouse`; другую папку задаёт переменная `SEOAUDIT_CACHE`.
+Chromium берётся из Playwright, `CHROME_PATH` или системного Chrome. При запуске в Docker от root
+добавьте `chrome_flags: "--no-sandbox"`.
 
 Из Python:
 
@@ -134,7 +156,7 @@ rules:
 - **Microdata/RDFa:** `extruct`.
 - **HTML-парсинг:** `selectolax` (Lexbor) — в десятки раз быстрее BeautifulSoup.
 - **Безопасный XML для sitemap:** `defusedxml`.
-- **Lighthouse и CrUX:** PageSpeed Insights API.
+- **Lighthouse и CrUX:** PageSpeed Insights API или локальный Lighthouse (Node.js) на Chromium от Playwright.
 - **Валидация HTML:** W3C Nu Validator (можно поднять локально через Docker).
 - **Идеи проверок:** SEOnaut, SiteOne Crawler, Screaming Frog, Lighthouse SEO, OWASP Secure Headers.
 
@@ -161,7 +183,3 @@ pytest
 ```
 
 E2E-тест гоняет полный аудит офлайн на мок-сайте (`httpx.MockTransport`).
-
-## Лицензия
-
-[MIT](LICENSE)

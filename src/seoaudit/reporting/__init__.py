@@ -8,7 +8,7 @@ from seoaudit.core.config import ReportConfig
 from seoaudit.core.models import AuditReport
 from seoaudit.reporting.data import write_csv, write_json
 from seoaudit.reporting.html import write_html
-from seoaudit.reporting.pdf import write_pdf
+from seoaudit.reporting.pdf import INSTALL_HINT as PDF_HINT, pdf_available, write_pdf
 
 Writer = Callable[[AuditReport, Path, ReportConfig], None]
 
@@ -18,6 +18,19 @@ WRITERS: dict[str, tuple[str, Writer]] = {
     "html": ("html", write_html),
     "pdf": ("pdf", write_pdf),
 }
+
+_REQUIREMENTS: dict[str, tuple[Callable[[], bool], str]] = {"pdf": (pdf_available, PDF_HINT)}
+
+
+def unavailable_formats(formats: list[str]) -> dict[str, str]:
+    """Formats whose optional dependencies are not installed, mapped to an install hint."""
+    missing = {}
+    for fmt in formats:
+        if fmt in _REQUIREMENTS:
+            available, hint = _REQUIREMENTS[fmt]
+            if not available():
+                missing[fmt] = hint
+    return missing
 
 
 def report_basename(report: AuditReport) -> str:
@@ -30,6 +43,8 @@ def render_report(report: AuditReport, out_dir: Path, config: ReportConfig, form
     unknown = set(formats) - set(WRITERS)
     if unknown:
         raise ValueError(f"Unknown report formats: {', '.join(sorted(unknown))}. Available: {', '.join(WRITERS)}")
+    if missing := unavailable_formats(formats):
+        raise ValueError("; ".join(missing.values()))
 
     out_dir.mkdir(parents=True, exist_ok=True)
     base = report_basename(report)

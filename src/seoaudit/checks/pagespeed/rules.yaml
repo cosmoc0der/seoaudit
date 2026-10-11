@@ -1,11 +1,16 @@
 category: performance
 
 options:
+  provider: auto         # auto: API when a key is set, otherwise local Lighthouse if Node.js exists; api | local
   api_key: null          # or env PAGESPEED_API_KEY; without a key Google applies a tiny quota
   strategies: [mobile]   # mobile, desktop
   max_pages: 3
-  concurrency: 2
+  concurrency: 2         # API only; local runs are sequential
   timeout: 120
+  lighthouse: null       # path to lighthouse/cli/index.js; default: global install or auto-install to ~/.cache/seoaudit
+  lighthouse_version: "13"
+  chrome_path: null      # default: env CHROME_PATH, then Playwright's Chromium, then system Chrome
+  chrome_flags: ""       # extra flags, e.g. --no-sandbox when running as root in Docker
 
 rules:
   performance_score:
