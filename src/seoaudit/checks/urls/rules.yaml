@@ -13,8 +13,8 @@ rules:
         message: "Длина: $length симв."
         fix: |
           Уберите из URL стоп-слова, дублирование категорий и идентификаторы:
-          `/catalog/category/notebooks/gaming-notebooks/asus/rog-strix-g16-2023-black-id12345` →
-          `/notebooks/asus-rog-strix-g16/`. При смене URL настройте 301-редиректы со старых адресов.
+          `/catalog/category/razdel/podrazdel/nazvanie-stranicy-2026-id12345` →
+          `/razdel/nazvanie-stranicy/`. При смене URL настройте 301-редиректы со старых адресов.
 
   uppercase:
     severity: low
@@ -61,16 +61,19 @@ rules:
         description: Пробелы кодируются как `%20`, такие URL некрасивы и часто ломаются при копировании.
         recommendation: Замените пробелы дефисами в ЧПУ.
         fix: |
-          Используйте транслитерацию/slugify при генерации адресов: `"Игровые ноутбуки"` → `igrovye-noutbuki`.
+          Используйте транслитерацию/slugify при генерации адресов: `"Название страницы"` → `nazvanie-stranicy`.
 
   query_params:
     severity: low
+    params:
+      # Google recommends a self-referencing canonical on paginated pages, so they are not duplicates.
+      pagination: [page, p, pg, paged, "pagen_*"]
     text:
       ru:
         title: Индексируемые URL с GET-параметрами
         description: >-
-          Страницы с параметрами (сортировки, фильтры, сессии) доступны для индексации без canonical —
-          это плодит дубли и тратит краулинговый бюджет.
+          Страницы с параметрами (сортировки, фильтры, сессии) открыты для индексации и указывают
+          canonical сами на себя или не указывают его — это плодит дубли и расходует лимит сканирования.
         recommendation: Укажите canonical на основной URL или закройте параметры от индексации.
         message: "Параметры: $query"
         fix: |
@@ -80,4 +83,4 @@ rules:
           User-agent: Yandex
           Clean-param: sort&order&utm_source
           ```
-          - Важные фильтры (бренд, категория) переведите на ЧПУ: `/notebooks/asus/` вместо `?brand=asus`.
+          - Важные фильтры (бренд, категория) переведите на ЧПУ: `/razdel/brend/` вместо `?brand=brend`.

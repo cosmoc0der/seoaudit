@@ -8,14 +8,14 @@ rules:
       ru:
         title: Отсутствует тег title
         description: >-
-          Title — главный on-page фактор ранжирования и заголовок сниппета в выдаче.
+          Title — один из важнейших внутренних факторов ранжирования и заголовок сниппета в выдаче.
           Без него поисковик сам сгенерирует заголовок, часто неудачный.
         recommendation: Добавьте уникальный информативный title на каждую страницу.
         fix: |
           Добавьте в `<head>` тег `<title>` с ключевой фразой в начале:
           ```html
           <head>
-            <title>Купить ноутбук ASUS ROG в Алматы — цены, отзывы | ShopName</title>
+            <title>Название страницы — уточнение | Название сайта</title>
           </head>
           ```
           В CMS/фреймворке задайте шаблон title для каждого типа страниц
@@ -34,21 +34,23 @@ rules:
           и оставьте один. Частая причина — тема CMS и SEO-плагин выводят title одновременно.
 
   title_length:
-    severity: medium
+    severity: low
     params:
-      min_length: 30
-      max_length: 65
+      min_px: 200
+      max_px: 561
+      font_px: 20
     refs: [https://developers.google.com/search/docs/appearance/title-link]
     text:
       ru:
         title: Неоптимальная длина title
         description: >-
-          Слишком короткий title не раскрывает содержимое страницы, слишком длинный
-          обрезается в выдаче. Рекомендуемая длина — $min_length–$max_length символов.
-        recommendation: Приведите длину title к диапазону $min_length–$max_length символов.
+          Слишком короткий title не раскрывает содержимое страницы, слишком длинный обрезается в выдаче.
+          Google обрезает заголовок по ширине в пикселях, а не по числу символов: широкие буквы (Ш, Ж, M, W)
+          занимают больше места. Ориентир — от $min_px до $max_px px, это примерно 30–60 символов.
+        recommendation: Уложите title в $min_px–$max_px px — главное в первых словах.
         message:
-          short: "Слишком короткий ($length симв.): «$value»"
-          long: "Слишком длинный ($length симв.): «$value»"
+          short: "Ширина ~$width px (меньше $min_px px), символов: $length — «$value»"
+          long: "Ширина ~$width px (обрезается после ~$max_px px), символов: $length — «$value»"
         fix: |
           - Ставьте главную ключевую фразу в начало title.
           - Добавляйте уточнения: регион, тип товара, выгоду.
@@ -56,7 +58,7 @@ rules:
           - Для шаблонных страниц обрезайте динамическую часть по длине на бэкенде.
 
   title_duplicate:
-    severity: high
+    severity: medium
     scope: page
     text:
       ru:
@@ -73,34 +75,37 @@ rules:
           или укажите `<link rel="canonical">` на основную.
 
   description_missing:
-    severity: high
+    severity: medium
     refs: [https://developers.google.com/search/docs/appearance/snippet]
     text:
       ru:
         title: Отсутствует meta description
         description: >-
-          Description используется для формирования сниппета. Без него поисковик возьмёт
-          случайный фрагмент текста, что снижает CTR.
+          Description используется для сниппета, особенно в Яндексе. Без него поисковик сам
+          подберёт фрагмент текста, не всегда удачный.
         recommendation: Добавьте продающее описание страницы в meta description.
         fix: |
           ```html
-          <meta name="description" content="Ноутбуки ASUS ROG в наличии: 120 моделей, доставка за 1 день, гарантия 2 года. Сравните цены и закажите онлайн.">
+          <meta name="description" content="Краткое описание страницы: что здесь есть, главная выгода и призыв к действию.">
           ```
           Для массовых страниц настройте шаблон: `{Название} — {ключевая выгода}. {Призыв к действию}.`
 
   description_length:
     severity: low
     params:
-      min_length: 70
-      max_length: 160
+      min_px: 400
+      max_px: 985
+      font_px: 13
     text:
       ru:
         title: Неоптимальная длина meta description
-        description: Оптимальная длина description — $min_length–$max_length символов, длиннее обрезается в выдаче.
-        recommendation: Приведите длину description к диапазону $min_length–$max_length символов.
+        description: >-
+          Сниппет в выдаче обрезается по ширине в пикселях: ориентир — от $min_px до $max_px px,
+          это примерно 70–155 символов. Слишком короткое описание поисковик заменит фрагментом текста страницы.
+        recommendation: Уложите description в $min_px–$max_px px.
         message:
-          short: "Слишком короткий ($length симв.): «$value»"
-          long: "Слишком длинный ($length симв.): «$value»"
+          short: "Ширина ~$width px (меньше $min_px px), символов: $length — «$value»"
+          long: "Ширина ~$width px (обрезается после ~$max_px px), символов: $length — «$value»"
         fix: |
           Сформулируйте 1–2 предложения: что на странице, ключевая выгода, призыв к действию.
           Важное размещайте в первых 120 символах — на мобильных сниппет короче.
@@ -127,7 +132,7 @@ rules:
         title: Отсутствует meta viewport
         description: >-
           Без viewport мобильные браузеры показывают десктопную версию в уменьшенном виде.
-          Страница не считается адаптированной под мобильные — это критично при mobile-first индексации.
+          Страница не считается адаптированной под мобильные — это критично при индексации по мобильной версии.
         recommendation: Добавьте meta viewport в `<head>` всех страниц.
         fix: |
           ```html
@@ -169,11 +174,11 @@ rules:
           И в заголовке ответа сервера: `Content-Type: text/html; charset=utf-8`.
 
   lang_missing:
-    severity: medium
+    severity: low
     text:
       ru:
         title: Не указан язык страницы (html lang)
-        description: Атрибут lang помогает поисковикам и экранным дикторам определить язык контента.
+        description: Атрибут lang нужен программам экранного доступа, переводчику браузера и Bing; Google определяет язык по тексту.
         recommendation: Укажите язык в атрибуте lang тега html.
         fix: |
           ```html
@@ -188,8 +193,8 @@ rules:
       ru:
         title: Используется meta refresh
         description: >-
-          Перенаправление через meta refresh медленнее серверного редиректа, хуже передаёт
-          ссылочный вес и может восприниматься как манипуляция.
+          Перенаправление через meta refresh срабатывает только после загрузки страницы, медленнее
+          серверного редиректа и неудобно пользователям; с задержкой поисковики считают его временным.
         recommendation: Замените meta refresh на серверный 301-редирект.
         message: "meta refresh: «$value»"
         fix: |
@@ -252,4 +257,19 @@ rules:
           <link rel="icon" href="/icon.svg" type="image/svg+xml">
           <link rel="apple-touch-icon" href="/apple-touch-icon.png">
           ```
-          Размер иконки для выдачи — кратный 48×48 px. Файл не должен быть закрыт в robots.txt.
+          Иконка должна быть квадратной: Google — не меньше 8×8 px, рекомендуется больше 48×48 px;
+          Яндекс рекомендует 120×120 px (SVG или PNG). Файл не должен быть закрыт в robots.txt.
+
+  description_multiple:
+    severity: medium
+    text:
+      ru:
+        title: Несколько meta description на странице
+        description: >-
+          Поисковик выбирает одно из описаний на своё усмотрение или игнорирует все — сниппет становится
+          непредсказуемым.
+        recommendation: Оставьте ровно один meta description.
+        message: "Тегов description: $count ($values)"
+        fix: |
+          Обычно второе описание выводят одновременно тема CMS и SEO-плагин или шаблон и отдельный компонент.
+          Найдите все места вывода `<meta name="description">` и оставьте одно.

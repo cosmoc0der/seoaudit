@@ -4,6 +4,27 @@ pages_crawled: Pages crawled
 overall_score: Overall score
 prepared_by: Prepared by
 summary: Summary
+exec_title: Executive summary
+exec_risks: Key risks
+plan_title: Action plan
+plan_intro: >-
+  All issues found, grouped by order of work. The number in the first column links to the
+  detailed description.
+phases:
+  now: First
+  next: Next
+  later: Planned improvements
+verdict:
+  A: "The site is in excellent technical shape. Nothing significant stands in the way of search growth."
+  B: "The site is in good technical shape, but some issues hold back search traffic growth."
+  C: "The site's technical state is fair: the issues found noticeably hinder search performance."
+  D: "The site's technical state is poor: some issues directly cost search traffic."
+  F: "Critical technical state: the site or part of it may drop out of search."
+verdict_counts: "Issues found: {issues}, of which need attention first: {urgent}."
+scale_pages: "Pages: {n} of {total} ({share}%)"
+scale_site: "Found: {n}"
+for_info: For information
+for_info_text: Does not affect the score but is worth considering.
 category_scores: Scores by section
 top_issues: Priority issues
 no_issues: No significant issues found.
@@ -17,9 +38,11 @@ what_to_do: What to do
 dev_instructions: Developer instructions
 affected_urls: Where found
 details: Details
-more_urls: "…and {n} more. See the CSV/JSON export for the full list."
+more_urls: "…and {n} more."
+more_urls_csv: "…and {n} more. The full list is in the CSV file attached to the report."
 references: References
-passed_checks: "Checked — no issues found"
+passed_checks: Checks without issues
+passed_intro: "These issues were looked for and not found:"
 issues_forms: [issue, issues]
 notes:
   crawl_limit_reached: crawl limit reached
@@ -34,6 +57,8 @@ notes:
   lighthouse_unavailable: "Lighthouse is unavailable — install Node.js 22+ or set a PageSpeed API key (PAGESPEED_API_KEY)"
   no_field_data: "not enough real-user data in Chrome UX Report — the site gets little Chrome traffic"
   field_data_local: "real-user data comes only from the PageSpeed API — set a key (PAGESPEED_API_KEY)"
+  catch_all_200: non-existent URLs answer 200 — see the soft 404 issue
+  sitemap_truncated: the sitemap is too large and was read only partially
   findings_truncated: findings list truncated
 other_checks: Not applicable / skipped
 checks_total: checks
@@ -41,6 +66,11 @@ score: Score
 appendix: Appendix
 crawl_stats: Crawl statistics
 crawled_pages: Crawled pages
+status_chart: Server response codes
+depth_chart: Crawl depth (clicks from home)
+problem_pages: Pages with errors and redirects
+slow_pages: Slowest server responses
+pages_short: pp.
 diagnostics: Technical notes
 status_code: Status
 depth: Depth
@@ -48,14 +78,19 @@ ttfb: TTFB, ms
 legend_title: How to read this report
 legend_text: >-
   Every check has a severity. Start with critical and high issues — they affect indexing
-  and rankings the most. Each issue comes with an explanation, a recommendation and
-  technical instructions for developers.
+  and rankings the most. "For information" items do not affect the score.
+legend_recommendations: Each issue comes with an explanation, a recommendation and technical instructions for developers.
 score_text: >-
-  Each section is scored by check severity and share of affected pages. The overall score
-  is a weighted average of the sections.
+  Score from 0 to 100: 90+ excellent (A), 75–89 good (B), 60–74 fair (C), 40–59 poor (D),
+  below 40 critical (F). Each issue lowers its section score by severity and share of affected
+  pages. The overall score averages the sections, with indexing, speed, meta tags and content
+  weighted higher.
+chips:
+  failed: Issues
+  passed: Checks passed
 stats:
   pages_total: Total URLs
-  html_pages: HTML pages (200)
+  html_pages: Working pages (status 200)
   error_pages: Errors (4xx/5xx)
   redirects: Redirects
   blocked_by_robots: Blocked by robots.txt
@@ -66,13 +101,13 @@ severity:
   high: High
   medium: Medium
   low: Low
-  info: Info
+  info: For information
 severity_plural:
   critical: Critical
   high: High
   medium: Medium
   low: Low
-  info: Info
+  info: For information
 status:
   passed: Passed
   failed: Failed

@@ -3,19 +3,31 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
-from urllib.parse import parse_qsl, quote, unquote, urlencode, urljoin, urlsplit, urlunsplit
+from functools import lru_cache
+from urllib.parse import quote, unquote, unquote_plus, urljoin, urlsplit, urlunsplit
+
+import idna
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 _SKIP_SCHEMES = ("#", "javascript:", "mailto:", "tel:", "data:", "sms:", "skype:", "viber:", "tg:")
-_PATH_SAFE = "/:@!$&'()*+,;=-._~"
+_PATH_SAFE = "/:@!$&'()*+,;=-._~%"
+_QUERY_SAFE = _PATH_SAFE + "?"
+_UNRESERVED = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+_ESCAPE = re.compile(r"%([0-9A-Fa-f]{2})")
+_LONE_PERCENT = re.compile(r"%(?![0-9A-Fa-f]{2})")
+# Cloudflare serves its own endpoints here (email obfuscation, challenges); the site owner doesn't control them.
+_SERVICE_PATH = "/cdn-cgi/"
 
 
 def normalize_url(url: str, base: str | None = None, strip_params: tuple[str, ...] = ()) -> str | None:
     url = (url or "").strip()
     if not url or url.lower().startswith(_SKIP_SCHEMES):
         return None
-    if base:
-        url = urljoin(base, url)
+    return _normalize_absolute(urljoin(base, url) if base else url, strip_params)
+
+
+@lru_cache(maxsize=100_000)
+def _normalize_absolute(url: str, strip_params: tuple[str, ...]) -> str | None:
     try:
         parts = urlsplit(url)
         port = parts.port
@@ -25,23 +37,49 @@ def normalize_url(url: str, base: str | None = None, strip_params: tuple[str, ..
     if scheme not in _DEFAULT_PORTS or not parts.hostname:
         return None
 
-    host = parts.hostname.lower().rstrip(".")
-    try:
-        host = host.encode("idna").decode("ascii")
-    except UnicodeError:
-        pass
+    host = _encode_host(parts.hostname.lower().rstrip("."))
+    if ":" in host:
+        host = f"[{host}]"
     netloc = host if port in (None, _DEFAULT_PORTS[scheme]) else f"{host}:{port}"
-    path = quote(_remove_dot_segments(unquote(parts.path)), safe=_PATH_SAFE) or "/"
+    # Escapes are kept as is: decoding would mangle non-UTF-8 bytes (legacy cp1251 URLs) and %2F.
+    path = quote(_remove_dot_segments(_normalize_escapes(parts.path)), safe=_PATH_SAFE) or "/"
 
     query = parts.query
-    if query:
-        pairs = [
-            (k, v)
-            for k, v in parse_qsl(query, keep_blank_values=True)
-            if not any(fnmatch(k.lower(), p) for p in strip_params)
-        ]
-        query = urlencode(pairs, quote_via=quote)
+    if query and strip_params:
+        query = "&".join(p for p in query.split("&") if not _is_stripped(p, strip_params))
+    query = quote(_normalize_escapes(query), safe=_QUERY_SAFE)
     return urlunsplit((scheme, netloc, path, query, ""))
+
+
+def _encode_host(host: str) -> str:
+    if host.isascii():
+        return host
+    # Browsers use UTS #46 (IDNA 2008): the stdlib codec is IDNA 2003 and maps "faß.de" to "fass.de".
+    try:
+        return idna.encode(host, uts46=True).decode("ascii")
+    except idna.IDNAError:
+        pass
+    try:
+        return host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return host
+
+
+def _normalize_escapes(text: str) -> str:
+    """RFC 3986 6.2.2: uppercase hex, decode unreserved characters, escape stray '%'."""
+    if "%" not in text:
+        return text
+
+    def fix(match: re.Match) -> str:
+        char = chr(int(match[1], 16))
+        return char if char in _UNRESERVED else f"%{match[1].upper()}"
+
+    return _ESCAPE.sub(fix, _LONE_PERCENT.sub("%25", text))
+
+
+def _is_stripped(pair: str, patterns: tuple[str, ...]) -> bool:
+    key = unquote_plus(pair.split("=", 1)[0]).lower()
+    return any(fnmatch(key, p) for p in patterns)
 
 
 def _remove_dot_segments(path: str) -> str:
@@ -66,6 +104,10 @@ def strip_www(host: str) -> str:
 
 def host_of(url: str) -> str:
     return (urlsplit(url).hostname or "").lower()
+
+
+def is_service_url(url: str) -> bool:
+    return urlsplit(url).path.startswith(_SERVICE_PATH)
 
 
 def pretty_url(url: str) -> str:

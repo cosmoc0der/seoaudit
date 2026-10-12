@@ -41,7 +41,8 @@ class CrawlConfig(BaseModel):
     include: list[str] = Field(default_factory=list)
     exclude: list[str] = Field(default_factory=list)
     strip_params: list[str] = Field(
-        default_factory=lambda: ["utm_*", "gclid", "yclid", "fbclid", "_openstat", "from"]
+        # Not "from": sites use it as a real pagination offset or date filter.
+        default_factory=lambda: ["utm_*", "gclid", "yclid", "fbclid", "_openstat"]
     )
     max_body_mb: float = 10.0
     max_sitemap_urls: int = 50_000
@@ -68,6 +69,7 @@ class ReportConfig(BaseModel):
     formats: list[str] = Field(default_factory=lambda: ["pdf", "json"])
     max_urls_per_rule: int = 10
     include_passed: bool = True
+    include_recommendations: bool = True
     meta: ReportMeta = Field(default_factory=ReportMeta)
 
 

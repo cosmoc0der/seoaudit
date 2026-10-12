@@ -12,7 +12,7 @@ def rule_penalty(rule: RuleResult, page_count: int) -> float:
         return 0.0
     weight = rule.severity.weight
     if rule.scope == RuleScope.PAGE and page_count:
-        ratio = min(1.0, rule.affected / page_count)
+        ratio = min(1.0, rule.pages_affected / page_count)
         return weight * (0.4 + 0.6 * ratio)
     return float(weight)
 

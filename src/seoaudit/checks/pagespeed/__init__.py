@@ -22,6 +22,8 @@ _FIELD_METRICS = {
     "INTERACTION_TO_NEXT_PAINT": "INP",
     "CUMULATIVE_LAYOUT_SHIFT_SCORE": "CLS",
 }
+_CRUX_CATEGORIES = {"AVERAGE": "требует улучшения", "SLOW": "плохо"}
+_DEVICES = {"mobile": "Смартфон", "desktop": "Компьютер"}
 
 
 class PageSpeedCheck(Check):
@@ -30,6 +32,7 @@ class PageSpeedCheck(Check):
     id = "pagespeed"
 
     async def check_site(self) -> None:
+        self._origin_reported: set[str] = set()
         try:
             runner = await self._runner()
         except LighthouseUnavailable as exc:
@@ -97,11 +100,13 @@ class PageSpeedCheck(Check):
     def _evaluate(self, url: str, strategy: str, lighthouse: dict[str, Any]) -> None:
         audits = lighthouse.get("audits", {})
         categories = lighthouse.get("categories", {})
-        base = {"strategy": strategy}
+        base = {"strategy": strategy, "device": _DEVICES.get(strategy, strategy)}
 
         score = round((categories.get("performance", {}).get("score") or 0) * 100)
         if score < self.params("performance_score")["min_score"]:
-            self.fail("performance_score", url, score=score, opportunities=_opportunities(audits), **base)
+            opportunities = _opportunities(audits)
+            key = None if opportunities else "bare"
+            self.fail("performance_score", url, key=key, score=score, opportunities=opportunities, **base)
 
         lab = {
             "lcp_slow": ("largest-contentful-paint", "max_ms", lambda v: round(v)),
@@ -125,13 +130,21 @@ class PageSpeedCheck(Check):
         metrics = field.get("metrics")
         if not metrics:
             return False
+        # Without enough visits to the page, PSI substitutes the whole site's data: one finding, not one per page.
+        origin = bool(field.get("origin_fallback"))
+        if origin:
+            if strategy in self._origin_reported:
+                return True
+            self._origin_reported.add(strategy)
+            url = self.ctx.site.base_url
         failing = [
-            f"{label}: {metric['category']}"
+            f"{label}: {_CRUX_CATEGORIES.get(metric['category'], metric['category'])}"
             for key, label in _FIELD_METRICS.items()
             if (metric := metrics.get(key)) and metric.get("category") not in (None, "FAST")
         ]
         if failing:
-            self.fail("field_cwv", url, metrics=failing, strategy=strategy)
+            device = _DEVICES.get(strategy, strategy)
+            self.fail("field_cwv", url, key="origin" if origin else None, metrics=failing, strategy=strategy, device=device)
         return True
 
 

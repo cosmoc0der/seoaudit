@@ -111,7 +111,7 @@ class Auditor:
                 await check.setup()
 
             crawl_started = perf_counter()
-            await Crawler(ctx, lambda page: self._check_page(ctx, checks, page)).run()
+            await Crawler(ctx, lambda page: self._check_page(ctx, checks, sink, page)).run()
             crawl_seconds = perf_counter() - crawl_started
             self._emit(EventType.CRAWL_FINISHED, current=len(ctx.pages))
 
@@ -145,13 +145,15 @@ class Auditor:
             exclude=cfg.exclude,
         )
 
-    async def _check_page(self, ctx: AuditContext, checks: list[Check], page: Page) -> None:
+    async def _check_page(self, ctx: AuditContext, checks: list[Check], sink: FindingSink, page: Page) -> None:
         if page.ok:
             results = await asyncio.gather(*(c.check_page(page) for c in checks), return_exceptions=True)
             for check, result in zip(checks, results):
                 if isinstance(result, Exception):
                     log.warning("Check %s failed on %s: %r", check.id, page.url, result)
                     ctx.diagnostics.append(f"{check.id}: {page.url}: {result!r}")
+                    # Without findings the rules would read as passed, though the page was never checked.
+                    _mark_error(check, sink, f"{page.url}: {result!r}")
         page.release()
         self._emit(EventType.PAGE_CRAWLED, page.url, current=len(ctx.pages), total=self.config.crawl.max_pages)
 
@@ -161,13 +163,17 @@ class Auditor:
         except Exception as exc:
             log.exception("Check %s failed", check.id)
             ctx.diagnostics.append(f"{check.id}: {exc!r}")
-            for spec in check.rules.values():
-                if spec.enabled and spec.id not in sink.findings and spec.id not in sink.statuses:
-                    sink.mark(spec.id, RuleStatus.ERROR, repr(exc))
+            _mark_error(check, sink, repr(exc))
 
     def _emit(self, type_: EventType, message: str = "", **kwargs) -> None:
         if self._on_event:
             self._on_event(Event(type=type_, message=message, **kwargs))
+
+
+def _mark_error(check: Check, sink: FindingSink, note: str) -> None:
+    for spec in check.rules.values():
+        if spec.enabled and spec.id not in sink.findings and spec.id not in sink.statuses:
+            sink.mark(spec.id, RuleStatus.ERROR, note)
 
 
 def _with_scheme(url: str) -> str:

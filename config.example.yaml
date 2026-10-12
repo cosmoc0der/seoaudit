@@ -25,6 +25,7 @@ report:
   formats: [pdf, json, csv]
   max_urls_per_rule: 10
   include_passed: true
+  include_recommendations: true   # false: findings only, without what-to-do and developer instructions
   meta:
     title: SEO-аудит сайта
     author: Digital Agency
@@ -41,8 +42,8 @@ checks:
       max_pages: 3
   html:
     options:
-      validator_pages: 5
-      validator_url: https://validator.w3.org/nu/
+      validator: auto      # auto | local (vnu, no network) | online (validator_url)
+      validator_pages: null
   # security:
   #   enabled: false
 
@@ -53,8 +54,8 @@ rules:
       max_kb: 500
   meta.title_length:
     params:
-      min_length: 20
-      max_length: 70
+      min_px: 200
+      max_px: 600
   meta.twitter_card_missing:
     enabled: false
   security.csp_missing:

@@ -72,6 +72,23 @@ class RuleResult(BaseModel):
     def affected(self) -> int:
         return len({f.url for f in self.findings if f.url}) or len(self.findings)
 
+    @property
+    def pages_affected(self) -> int:
+        """For scoring: a finding about a target URL (broken link, image) counts the pages carrying it.
+
+        data["sources"] holds only a sample while data["pages"] is the full count, hence the max().
+        """
+        pages: set[str] = set()
+        largest = 0
+        for finding in self.findings:
+            count = finding.data.get("pages")
+            if isinstance(count, int):
+                pages.update(finding.data.get("sources", ()))
+                largest = max(largest, count)
+            elif finding.url:
+                pages.add(finding.url)
+        return max(len(pages), largest) or len(self.findings)
+
 
 class CategoryResult(BaseModel):
     id: str

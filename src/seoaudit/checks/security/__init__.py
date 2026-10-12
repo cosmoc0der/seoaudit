@@ -13,6 +13,21 @@ from seoaudit.core.http import fetch
 from seoaudit.core.page import Page
 
 _VERSION_IN_HEADER = re.compile(r"\d+\.\d+")
+# HttpOnly protects what a stolen session is made of; language or consent cookies are often read by scripts on purpose.
+_SESSION_COOKIE = re.compile(r"sess|auth|token|login|jwt|(^|_)sid$", re.I)
+# Double-submit CSRF tokens (XSRF-TOKEN, csrftoken) must stay readable by the page's own scripts.
+_CSRF_COOKIE = re.compile(r"csrf|xsrf", re.I)
+# These leak as ordinary HTML pages; for the rest an HTML answer is a catch-all page, not the file.
+_HTML_LEAKS = {"/phpinfo.php", "/info.php", "/server-status"}
+_TLS_ERRORS = (
+    ("expired", "Срок действия сертификата истёк"),
+    ("not yet valid", "Срок действия сертификата ещё не начался"),
+    ("hostname mismatch", "Сертификат выпущен на другой домен"),
+    ("not valid for", "Сертификат выпущен на другой домен"),
+    ("self-signed", "Самоподписанный сертификат"),
+    ("self signed", "Самоподписанный сертификат"),
+    ("issuer", "Не установлена промежуточная цепочка сертификатов"),
+)
 _DISCLOSURE_HEADERS = ("x-powered-by", "x-aspnet-version", "x-aspnetmvc-version")
 _HEADER_RULES = {
     "hsts_missing": "strict-transport-security",
@@ -31,7 +46,7 @@ class SecurityCheck(Check):
 
     async def check_page(self, page: Page) -> None:
         if page.url.startswith("https://"):
-            resources = [*(i.src for i in page.images), *(s.src for s in page.scripts), *page.stylesheets]
+            resources = [*(u for i in page.images for u in i.variants), *(s.src for s in page.scripts), *page.stylesheets]
             resources += [page.absolute(n.attributes.get("src")) for n in page.tree.css("iframe[src], video[src], audio[src], source[src]")]
             report_group(self, "mixed_content", page.url, [u for u in resources if u and u.startswith("http://")])
         report_group(
@@ -61,28 +76,34 @@ class SecurityCheck(Check):
         await self._sensitive_files()
 
     async def _http_redirect(self) -> None:
-        host = urlsplit(self.ctx.site.base_url).netloc
-        result = await fetch(self.ctx.client, f"http://{host}/", follow=False, read_body=False)
-        if result.error or result.status is None:
-            self.not_applicable("http_redirect", "port_80_closed")
+        url = f"http://{urlsplit(self.ctx.site.base_url).netloc}/"
+        result = await fetch(self.ctx.client, url, read_body=False)
+        hops = result.redirects
+        if not hops:
+            if result.error or result.status is None:
+                self.not_applicable("http_redirect", "port_80_closed")
+            else:
+                self.fail("http_redirect", url, key="none", status=result.status)
             return
-        location = result.headers.get("location", "")
-        if result.status in (301, 308) and location.startswith("https://"):
-            return
-        key = "temporary" if result.status in (302, 303, 307) and location.startswith("https://") else "none"
-        self.fail("http_redirect", f"http://{host}/", key=key, status=result.status)
+        status = hops[0].status
+        if not result.final_url.startswith("https://"):
+            self.fail("http_redirect", url, key="none", status=status)
+        elif status not in (301, 308):
+            self.fail("http_redirect", url, key="temporary", status=status)
+        elif any(hop.url.startswith("http://") for hop in hops[1:]):
+            self.fail("http_redirect", url, key="chain", status=status)
 
     async def _certificate(self) -> None:
         site = self.ctx.site
         parts = urlsplit(site.base_url)
         if site.tls_error:
-            self.fail("ssl_invalid", site.base_url, error=site.tls_error)
+            self.fail("ssl_invalid", site.base_url, error=_tls_error(site.tls_error))
             self.not_applicable("ssl_expiring")
             return
         try:
             expires_at = await asyncio.to_thread(_cert_expiry, parts.hostname, parts.port or 443, self.ctx.config.crawl.timeout)
         except ssl.SSLCertVerificationError as exc:
-            self.fail("ssl_invalid", site.base_url, error=exc.verify_message or str(exc))
+            self.fail("ssl_invalid", site.base_url, error=_tls_error(exc.verify_message or str(exc)))
             return
         except (OSError, ssl.SSLError) as exc:
             self.error("ssl_expiring", f"TLS handshake failed: {exc}")
@@ -117,7 +138,7 @@ class SecurityCheck(Check):
 
         async def probe(path: str, pattern: str) -> None:
             result = await fetch(self.ctx.client, origin + path, follow=False, max_bytes=64 * 1024)
-            if result.status == 200 and "text/html" not in result.content_type:
+            if result.status == 200 and (path in _HTML_LEAKS or "text/html" not in result.content_type):
                 if re.search(pattern.encode(), result.body, re.MULTILINE):
                     self.fail("sensitive_files", origin + path, path=path)
 
@@ -130,11 +151,17 @@ def _cookie_issues(raw: str, is_https: bool) -> tuple[str, list[str]]:
     issues = []
     if is_https and "secure" not in attrs:
         issues.append("Secure")
-    if "httponly" not in attrs:
+    if "httponly" not in attrs and _SESSION_COOKIE.search(name) and not _CSRF_COOKIE.search(name):
         issues.append("HttpOnly")
     if "samesite" not in attrs:
         issues.append("SameSite")
     return name, issues
+
+
+def _tls_error(raw: str) -> str:
+    """OpenSSL wording means nothing to the report's reader; the cause does."""
+    lowered = raw.lower()
+    return next((text for marker, text in _TLS_ERRORS if marker in lowered), "Браузеры не доверяют сертификату")
 
 
 def _cert_expiry(host: str, port: int, timeout: float) -> float:

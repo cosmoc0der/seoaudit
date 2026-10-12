@@ -30,6 +30,10 @@ def _main() -> None:
 
 
 ConfigOption = Annotated[Optional[Path], typer.Option("--config", "-c", help="YAML config file.")]
+RecommendationsOption = Annotated[
+    Optional[bool],
+    typer.Option("--recommendations/--no-recommendations", help="Include what-to-do and developer instructions."),
+]
 
 
 def _split(values: list[str] | None) -> list[str]:
@@ -53,6 +57,7 @@ def audit(
     max_pages: Annotated[Optional[int], typer.Option(help="Crawl limit.")] = None,
     lang: Annotated[Optional[str], typer.Option(help="Report language.")] = None,
     disable: Annotated[Optional[list[str]], typer.Option("--disable", "-d", help="Checks to skip, e.g. pagespeed,html")] = None,
+    recommendations: RecommendationsOption = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Crawl a site, run all checks and write reports."""
@@ -61,6 +66,7 @@ def audit(
         "lang": lang,
         "crawl": {"max_pages": max_pages} if max_pages else None,
         "checks": {check: {"enabled": False} for check in _split(disable)} or None,
+        "report": _report_overrides(recommendations),
     }
     cfg = _load(config, **overrides)
     formats = _formats(_split(formats), cfg.report.formats)
@@ -104,9 +110,10 @@ def render(
     config: ConfigOption = None,
     out: Annotated[Path, typer.Option("--out", "-o")] = Path("reports"),
     formats: Annotated[Optional[list[str]], typer.Option("--format", "-f")] = None,
+    recommendations: RecommendationsOption = None,
 ) -> None:
     """Re-render reports from a saved JSON without re-crawling."""
-    cfg = _load(config)
+    cfg = _load(config, report=_report_overrides(recommendations))
     _write(load_report(report_json), out, cfg, _formats(_split(formats), ["pdf"]))
 
 
@@ -146,6 +153,10 @@ def checks(config: ConfigOption = None) -> None:
         enabled = cfg.check(plan.cls.id).enabled
         table.add_row(plan.cls.id, plan.cls.__module__, str(len(plan.active_rules)), "yes" if enabled else "[red]no")
     console.print(table)
+
+
+def _report_overrides(recommendations: bool | None) -> dict | None:
+    return None if recommendations is None else {"include_recommendations": recommendations}
 
 
 def _formats(explicit: list[str], default: list[str]) -> list[str]:

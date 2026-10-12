@@ -38,6 +38,12 @@ def report_basename(report: AuditReport) -> str:
     return f"{host}-{report.started_at:%Y%m%d-%H%M}"
 
 
+def _basename(report: AuditReport, config: ReportConfig) -> str:
+    # Both editions of one audit are often sent together, so they must not overwrite each other.
+    base = report_basename(report)
+    return base if config.include_recommendations else f"{base}-findings"
+
+
 def render_report(report: AuditReport, out_dir: Path, config: ReportConfig, formats: list[str] | None = None) -> list[Path]:
     formats = formats or config.formats
     unknown = set(formats) - set(WRITERS)
@@ -47,7 +53,9 @@ def render_report(report: AuditReport, out_dir: Path, config: ReportConfig, form
         raise ValueError("; ".join(missing.values()))
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    base = report_basename(report)
+    # The report points readers to the CSV for full URL lists only when one is written alongside it.
+    config = config.model_copy(update={"formats": formats})
+    base = _basename(report, config)
     written = []
     for fmt in formats:
         extension, writer = WRITERS[fmt]

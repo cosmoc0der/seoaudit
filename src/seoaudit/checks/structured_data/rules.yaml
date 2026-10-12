@@ -10,7 +10,7 @@ rules:
         title: На сайте нет микроразметки Schema.org
         description: >-
           Микроразметка помогает поисковикам понять содержимое страниц и даёт расширенные сниппеты:
-          цены, рейтинги, хлебные крошки, FAQ — это заметно повышает CTR.
+          цены, рейтинги, хлебные крошки, данные о товарах и мероприятиях — это заметно повышает CTR.
         recommendation: Внедрите разметку JSON-LD для ключевых типов страниц.
         fix: |
           Добавьте JSON-LD в `<head>` или конец `<body>`. Минимальный набор: Organization на главной,
@@ -35,7 +35,7 @@ rules:
         title: Синтаксическая ошибка в JSON-LD
         description: Блок JSON-LD содержит невалидный JSON и полностью игнорируется поисковиками.
         recommendation: Исправьте синтаксис JSON в разметке.
-        message: "$error"
+        message: "Ошибка в строке $line, позиция $col"
         fix: |
           Частые ошибки: висячая запятая после последнего элемента, неэкранированные кавычки
           и переносы строк в значениях, комментарии внутри JSON.
@@ -50,26 +50,45 @@ rules:
   schema_required:
     severity: medium
     params:
+      # Only what Google's rich result docs mark required: Organization and Article have recommended
+      # properties only. "a|b" means any one of them. Subtypes use the entry of their nearest listed ancestor;
+      # an empty entry stops that for subtypes with a different role (a recipe step is not a list to Google).
       required:
-        Organization: [name, url]
-        LocalBusiness: [name, address]
-        Product: [name]
-        Offer: [price, priceCurrency]
-        AggregateRating: [ratingValue]
+        Product: [name, offers|review|aggregateRating]
+        ProductGroup: [name]
+        Offer: [price|priceSpecification, priceCurrency|priceSpecification]
+        AggregateOffer: [lowPrice, priceCurrency]
+        AggregateRating: [ratingValue, ratingCount|reviewCount]
+        EmployerAggregateRating: [itemReviewed, ratingValue, ratingCount|reviewCount]
+        Rating: [ratingValue]
         Review: [author, reviewRating]
-        Article: [headline, datePublished, author]
-        NewsArticle: [headline, datePublished, author]
-        BlogPosting: [headline, datePublished, author]
+        LocalBusiness: [name, address]
         BreadcrumbList: [itemListElement]
+        ItemList: [itemListElement]
         ListItem: [position]
-        FAQPage: [mainEntity]
-        Question: [name, acceptedAnswer]
+        OfferCatalog: []
+        HowToSection: [name, itemListElement]
+        HowToStep: [text|itemListElement]
+        HowToDirection: [text]
+        HowToTip: [text]
+        HowToItem: []
+        QAPage: [mainEntity]
+        Question: [name, acceptedAnswer|suggestedAnswer]
+        Answer: [text]
         Event: [name, startDate, location]
+        BroadcastEvent: [startDate]
+        PublicationEvent: []
+        DeliveryEvent: []
+        CourseInstance: []
+        ClaimReview: []
         Recipe: [name, image]
         VideoObject: [name, thumbnailUrl, uploadDate]
-        JobPosting: [title, datePosted, description, hiringOrganization]
-      one_of:
-        Product: [offers, review, aggregateRating]
+        JobPosting: [title, description, datePosted, hiringOrganization, jobLocation|applicantLocationRequirements]
+        SoftwareApplication: [name, offers, aggregateRating|review]
+        Dataset: [name, description]
+        DiscussionForumPosting: [author, datePublished, text|image|video]
+        ProfilePage: [mainEntity]
+        Movie: [name, image]
     refs: [https://developers.google.com/search/docs/appearance/structured-data/search-gallery]
     text:
       ru:
@@ -78,18 +97,19 @@ rules:
         recommendation: Добавьте обязательные свойства для указанных типов.
         message: "$type: нет $missing"
         fix: |
+          Через косую черту в списке указаны взаимозаменяемые свойства: достаточно любого из них.
           Сверьтесь с требованиями Google для конкретного типа (ссылка ниже) и проверьте страницу
           в https://search.google.com/test/rich-results. Пример Product:
           ```json
           {
             "@context": "https://schema.org",
             "@type": "Product",
-            "name": "ASUS ROG Strix G16",
-            "image": "https://example.com/rog.jpg",
+            "name": "Название товара",
+            "image": "https://example.com/images/tovar.jpg",
             "offers": {
               "@type": "Offer",
-              "price": "899990",
-              "priceCurrency": "KZT",
+              "price": "1990",
+              "priceCurrency": "RUB",
               "availability": "https://schema.org/InStock"
             }
           }
@@ -99,10 +119,10 @@ rules:
     severity: low
     scope: site
     params:
-      types: [Organization, LocalBusiness, Corporation, Store, OnlineStore, WebSite, Person, NewsMediaOrganization, EducationalOrganization, MedicalOrganization]
+      types: [Organization, LocalBusiness, Corporation, Store, OnlineStore, Person, NewsMediaOrganization, EducationalOrganization, MedicalOrganization]
     text:
       ru:
-        title: На главной нет разметки Organization / WebSite
+        title: На главной нет разметки Organization
         description: Разметка организации помогает поисковикам связать сайт с брендом, логотипом и контактами (Knowledge Graph).
         recommendation: Добавьте Organization (или LocalBusiness) и WebSite на главную страницу.
         fix: |
@@ -114,8 +134,8 @@ rules:
             "name": "Компания",
             "url": "https://example.com",
             "logo": "https://example.com/logo.png",
-            "contactPoint": {"@type": "ContactPoint", "telephone": "+7-700-000-00-00", "contactType": "customer service"},
-            "sameAs": ["https://t.me/company", "https://instagram.com/company"]
+            "contactPoint": {"@type": "ContactPoint", "telephone": "+7-000-000-00-00", "contactType": "customer service"},
+            "sameAs": ["https://t.me/company", "https://vk.com/company"]
           }
           </script>
           ```
@@ -125,7 +145,9 @@ rules:
     text:
       ru:
         title: Нет разметки хлебных крошек
-        description: BreadcrumbList заменяет URL в сниппете на понятный путь по разделам сайта.
+        description: >-
+          BreadcrumbList помогает поисковикам понять структуру сайта; в десктопной выдаче Google
+          и в Яндексе показывает путь по разделам вместо URL.
         recommendation: Добавьте разметку BreadcrumbList на внутренние страницы.
         fix: |
           ```json
@@ -133,8 +155,137 @@ rules:
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              {"@type": "ListItem", "position": 1, "name": "Каталог", "item": "https://example.com/catalog/"},
-              {"@type": "ListItem", "position": 2, "name": "Ноутбуки", "item": "https://example.com/catalog/notebooks/"}
+              {"@type": "ListItem", "position": 1, "name": "Раздел", "item": "https://example.com/razdel/"},
+              {"@type": "ListItem", "position": 2, "name": "Название страницы", "item": "https://example.com/razdel/stranica/"}
             ]
           }
           ```
+
+  schema_values:
+    severity: medium
+    refs: [https://developers.google.com/search/docs/appearance/structured-data/sd-policies]
+    text:
+      ru:
+        title: Неверный формат значений в микроразметке
+        description: >-
+          Свойство заполнено, но значение в формате, который Google не принимает: дата не по ISO 8601,
+          цена с пробелами или знаком валюты, неверный код валюты, адрес без протокола. Расширенный
+          сниппет для такого элемента не показывается, Search Console отмечает ошибку.
+        recommendation: Приведите значения к форматам, которые требует Google.
+        message:
+          date: "Дата не в формате ISO 8601 (значений: $count): $examples"
+          price: "Цена не числом (значений: $count): $examples"
+          currency: "Неверный код валюты ISO 4217 (значений: $count): $examples"
+          url: "Адрес не распознаётся как URL (значений: $count): $examples"
+          breadcrumb: "Ошибки в элементах хлебных крошек (ошибок: $count): $examples"
+        fix: |
+          - Даты: `2026-03-15` или `2026-03-15T10:00:00+03:00`.
+          - Цена: число с точкой, без пробелов и символа валюты — `"price": "1490.00"`; валюта отдельно,
+            кодом ISO 4217 — `"priceCurrency": "RUB"` (не `RUR`, не `руб.`).
+          - Адреса (`url`, `image`, `logo`) указывайте полностью, с протоколом: `https://example.com/images/photo.jpg`,
+            а не `www.example.com/images/photo.jpg` — без протокола это относительный путь к несуществующей странице.
+          - Каждый элемент хлебных крошек: `position` (1, 2, 3…), `name` и `item` (у последнего `item` можно не указывать).
+          Проверьте результат в https://search.google.com/test/rich-results.
+
+  schema_vocabulary:
+    severity: medium
+    refs: [https://validator.schema.org/, https://schema.org/docs/full.html]
+    text:
+      ru:
+        title: Микроразметка не соответствует словарю Schema.org
+        description: >-
+          В разметке есть типы или свойства, которых нет в Schema.org, значения не того типа или
+          недопустимые значения перечислений. Поисковики пропускают такие элементы: опечатка в типе
+          выключает весь объект, в свойстве — само свойство. Это те же ошибки, что показывает
+          валидатор Schema.org (validator.schema.org).
+        recommendation: Исправьте типы, свойства и значения по словарю Schema.org.
+        message:
+          missing: "Нет @context, поисковики не распознают разметку как Schema.org (объектов: $count): $examples"
+          obsolete: "Словарь data-vocabulary.org, Google не поддерживает его с 2021 года (объектов: $count): $examples"
+          type: "Типы, которых нет в Schema.org (типов: $count): $examples. После стрелки — вероятно, имелось в виду"
+          property: "Свойства, которых нет у этого типа (свойств: $count): $examples. После стрелки — вероятно, имелось в виду"
+          range: "Значение не того типа (значений: $count): $examples. В скобках — типы, которые допускает Schema.org"
+          enum: "Недопустимое значение (значений: $count): $examples. В скобках — допустимые значения"
+        fix: |
+          - В каждом блоке JSON-LD укажите `"@context": "https://schema.org"`; разметку data-vocabulary.org
+            замените на Schema.org.
+          - Названия типов и свойств чувствительны к регистру: `Product`, `PostalAddress`, `priceCurrency`.
+            Свойство должно принадлежать типу или его родителю: у `Organization` нет `price`, у `Offer` нет `brand`.
+          - Вложенный объект должен быть того типа, который ожидает свойство: `author` — `Person`
+            или `Organization`, `address` — `PostalAddress`, `offers` — `Offer` или `AggregateOffer`.
+          - Перечисления — только значениями из словаря:
+          ```json
+          "availability": "https://schema.org/InStock",
+          "itemCondition": "https://schema.org/NewCondition",
+          "eventStatus": "https://schema.org/EventScheduled"
+          ```
+          Проверьте страницу в https://validator.schema.org/ — после исправления ошибок там быть не должно.
+
+  schema_recommended:
+    severity: low
+    params:
+      # Google's recommended properties, trimmed to those that change the snippet; "a|b" means any one of them,
+      # "offers.availability" is checked on each offer present.
+      recommended:
+        Article: [headline, image, datePublished, dateModified, author]
+        DiscussionForumPosting: [url]
+        Product: [image, description, brand, sku, gtin|gtin8|gtin12|gtin13|gtin14|mpn|isbn, offers.availability]
+        ProductGroup: [variesBy, hasVariant]
+        AggregateOffer: [highPrice, offerCount]
+        Review: [datePublished]
+        LocalBusiness: [telephone, url, geo, openingHoursSpecification, priceRange]
+        Organization: [name, url]
+        WebSite: [name, url]
+        Event: [description, endDate, eventStatus, image, offers, organizer, performer]
+        PublicationEvent: []
+        DeliveryEvent: []
+        CourseInstance: []
+        JobPosting: [baseSalary, employmentType, validThrough, identifier]
+        Recipe: [author, datePublished, description, recipeIngredient, recipeInstructions, totalTime, recipeYield]
+        VideoObject: [description, duration, contentUrl|embedUrl]
+        SoftwareApplication: [applicationCategory, operatingSystem]
+        Movie: [director, dateCreated]
+    refs: [https://developers.google.com/search/docs/appearance/structured-data/search-gallery]
+    text:
+      ru:
+        title: В микроразметке нет рекомендуемых свойств
+        description: >-
+          Разметка рабочая, но без свойств, которые Google рекомендует для этого типа: сниппет будет беднее
+          (без даты, цены, наличия, рейтинга), а Search Console и Rich Results Test покажут предупреждения.
+        recommendation: Добавьте рекомендуемые свойства, если данные для них есть на странице.
+        message: "$type: нет $missing"
+        fix: |
+          Заполняйте только тем, что действительно видно на странице: Google снимает расширенные
+          результаты за данные в разметке, которых нет в контенте. Пример для статьи:
+          ```json
+          {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": "Заголовок статьи",
+            "image": "https://example.com/images/cover.jpg",
+            "datePublished": "2026-03-15T10:00:00+03:00",
+            "dateModified": "2026-04-02T09:00:00+03:00",
+            "author": {"@type": "Person", "name": "Имя Автора", "url": "https://example.com/authors/imya/"}
+          }
+          ```
+          Проверьте страницу в https://search.google.com/test/rich-results — в разделе предупреждений
+          перечислены недостающие свойства.
+
+  rich_result_retired:
+    severity: info
+    scope: site
+    params:
+      # SearchAction only ever powered the sitelinks search box; Occupation only the salary estimates.
+      types: [FAQPage, HowTo, SearchAction, SpecialAnnouncement, ClaimReview, Occupation]
+    refs:
+      - https://developers.google.com/search/updates
+      - https://developers.google.com/search/blog/2025/06/simplifying-search-results
+    text:
+      ru:
+        title: Разметка для расширенных результатов, которые Google больше не показывает
+        description: >-
+          Google отключил часть расширенных результатов: HowTo (2023), поле поиска по сайту — SearchAction (2024),
+          SpecialAnnouncement, ClaimReview и оценки зарплат — Occupation (2025), FAQ (май 2026). Разметка не вредит
+          и может использоваться другими сервисами, но дополнительного сниппета в Google уже не даст.
+        recommendation: Не тратьте ресурсы на развитие этой разметки ради Google; удалять её не обязательно.
+        message: "$type (страниц: $pages)"

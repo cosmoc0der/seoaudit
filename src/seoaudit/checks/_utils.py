@@ -35,5 +35,18 @@ def report_group(check: Check, rule: str, page_url: str, items: list[str], examp
         check.fail(rule, page_url, count=len(unique), examples=[pretty_url(u) for u in unique[:examples]])
 
 
+def report_target(check: Check, rule: str, target: str, sources: list[str], max_sources: int = 50, **data) -> None:
+    """One finding per bad URL: it is fixed once, however many pages point to it."""
+    sources = list(dict.fromkeys(sources))
+    check.fail(
+        rule,
+        target,
+        pages=len(sources),
+        examples=[pretty_url(s) for s in sources[:5]],
+        sources=sources[:max_sources],
+        **data,
+    )
+
+
 def truncate(text: str, limit: int = 120) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"

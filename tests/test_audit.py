@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from conftest import SITE
+from seoaudit.core import http
 from seoaudit.core.config import AuditConfig, ConfigError
 from seoaudit.core.engine import Auditor
 from seoaudit.core.models import AuditReport, RuleStatus
 from seoaudit.core.urls import normalize_url, pretty_url
-from seoaudit.reporting.html import plural, render_html
+from seoaudit.reporting.html import local_urls, plural, render_html
 
 OFFLINE = {"checks": {"pagespeed": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}}
 
@@ -30,9 +32,12 @@ async def test_full_audit(transport):
 
     broken = rule(report, "links.broken_internal")
     assert broken.status == RuleStatus.FAILED
-    assert broken.findings[0].data["target"] == f"{SITE}/broken"
+    assert [f.url for f in broken.findings] == [f"{SITE}/broken"]
+    assert broken.findings[0].data["sources"] == [f"{SITE}/"]
 
     assert [f.url for f in rule(report, "content.h1_missing").findings] == [f"{SITE}/about"]
+    placeholder = rule(report, "content.placeholder_text").findings
+    assert [(f.url, f.data["context"]) for f in placeholder] == [(f"{SITE}/about", "No heading here. Lorem ipsum dolor.")]
     assert rule(report, "meta.description_duplicate").affected == 2
     assert rule(report, "images.too_large").status == RuleStatus.FAILED
     assert rule(report, "images.alt_missing").status == RuleStatus.FAILED
@@ -64,8 +69,34 @@ def test_unknown_override_is_rejected():
 
 
 def test_report_renders(transport):
-    html = render_html(run(transport), AuditConfig().report)
+    report = run(transport)
+    html = render_html(report, AuditConfig().report)
     assert "shop.test" in html and "Битые внутренние ссылки" in html
+    assert "Инструкция для разработчика" in html
+
+    brief = render_html(report, AuditConfig.model_validate({"report": {"include_recommendations": False}}).report)
+    assert "Битые внутренние ссылки" in brief
+    assert "Инструкция для разработчика" not in brief and "Что сделать" not in brief
+
+
+async def test_timeout_is_retried(monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) == 1:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, content=b"ok")
+
+    monkeypatch.setattr(http, "_RETRY_DELAY", 0)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await http.fetch(client, f"{SITE}/")
+    assert result.ok and len(calls) == 2
+
+
+def test_failed_body_after_success_is_not_broken():
+    assert not http.FetchResult(SITE, SITE, status=200, error="ReadTimeout").broken
+    assert http.FetchResult(SITE, SITE, error="ConnectError").broken
 
 
 @pytest.mark.parametrize(
@@ -88,3 +119,8 @@ def test_pretty_url():
 @pytest.mark.parametrize(("n", "word"), [(1, "проблема"), (3, "проблемы"), (5, "проблем"), (11, "проблем"), (22, "проблемы")])
 def test_plural(n, word):
     assert plural(n, ["проблема", "проблемы", "проблем"]) == word
+
+
+def test_local_urls_keep_foreign_hosts():
+    text = "→ https://site.ru/a, https://site.ru.evil/b, https://cdn.site.ru/c"
+    assert local_urls(text, "https://site.ru") == "→ /a, https://site.ru.evil/b, https://cdn.site.ru/c"

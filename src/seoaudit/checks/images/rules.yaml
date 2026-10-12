@@ -19,7 +19,7 @@ rules:
         message: "Изображений без alt: $count (например: $examples)"
         fix: |
           ```html
-          <img src="rog-strix-g16.jpg" alt="Ноутбук ASUS ROG Strix G16, вид спереди">
+          <img src="photo.jpg" alt="Краткое описание того, что изображено">
           <img src="divider.svg" alt="">  <!-- декоративное -->
           ```
           В CMS сделайте поле alt обязательным при загрузке изображения; для товаров
@@ -58,7 +58,7 @@ rules:
       ru:
         title: Изображения в устаревших форматах
         description: WebP и AVIF весят на 25–50% меньше JPEG/PNG при том же качестве.
-        recommendation: Конвертируйте изображения в WebP или AVIF с фолбэком для старых браузеров.
+        recommendation: Конвертируйте изображения в WebP или AVIF с резервным вариантом для старых браузеров.
         message: "$format, $size_kb КБ"
         fix: |
           ```html
@@ -114,7 +114,8 @@ rules:
         title: Изображения без отложенной загрузки
         description: >-
           Изображения ниже первого экрана грузятся сразу, конкурируя за канал с важными ресурсами.
-          Первые $skip_first изображения не учитываются.
+          Не учитываются SVG-иконки, изображения с явным loading="eager" или fetchpriority="high"
+          и первые изображения страницы (число: $skip_first).
         recommendation: Добавьте loading="lazy" изображениям вне первого экрана.
         message: "Изображений: $count (например: $examples)"
         fix: |

@@ -22,14 +22,15 @@ PAGES: dict[str, tuple[int, dict[str, str], bytes]] = {
         {"content-type": "text/html; charset=utf-8"},
         html(
             "Test shop home page with a reasonably long title",
-            '<h1>Shop</h1><a href="/about">About us</a> <a href="/broken">Broken</a> '
-            '<a href="/old">Old</a> <a href="/private/x">Private</a> <img src="/big.jpg">',
+            '<h1>Shop</h1><p>Gift cards coming soon.</p><a href="/about">About us</a> <a href="/broken">Broken</a> '
+            '<a href="/old">Old</a> <a href="/private/x">Private</a> <img src="/big.jpg"> '
+            '<a href="/cdn-cgi/l/email-protection#7a1b">Email</a>',
         ).encode(),
     ),
     "/about": (
         200,
         {"content-type": "text/html; charset=utf-8"},
-        html("About the test shop and the people behind it", "<p>No heading here</p>").encode(),
+        html("About the test shop and the people behind it", "<p>No heading here. Lorem ipsum dolor.</p>").encode(),
     ),
     "/old": (301, {"location": "/about"}, b""),
     "/big.jpg": (200, {"content-type": "image/jpeg"}, b"\xff" * 300 * 1024),

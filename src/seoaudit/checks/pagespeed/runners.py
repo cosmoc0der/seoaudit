@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import shutil
-import signal
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
+
+from seoaudit.core.tools import cache_dir, run_process
 
 log = logging.getLogger(__name__)
 
@@ -135,7 +134,7 @@ def node_available() -> bool:
 async def _find_or_install_lighthouse(node: str, version: str) -> Path:
     if cli := _npm_script("lighthouse", "lighthouse/cli/index.js"):
         return cli
-    prefix = Path(os.environ.get("SEOAUDIT_CACHE") or Path.home() / ".cache" / "seoaudit") / "lighthouse"
+    prefix = cache_dir("lighthouse")
     cli = prefix / "node_modules" / "lighthouse" / "cli" / "index.js"
     if cli.is_file():
         return cli
@@ -188,32 +187,7 @@ async def _playwright_chromium() -> str | None:
 
 
 async def _run_process(cmd: list[str], env: dict[str, str] | None, timeout: float) -> tuple[bytes, bytes, int]:
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=env,
-        start_new_session=sys.platform != "win32",
-    )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
-    except asyncio.TimeoutError:
-        await _kill_tree(proc)
-        raise LighthouseError(f"timeout after {timeout:.0f} s") from None
-    return stdout, stderr, proc.returncode
-
-
-async def _kill_tree(proc: asyncio.subprocess.Process) -> None:
-    """Killing only node would leave the Chrome it spawned running."""
-    try:
-        if sys.platform == "win32":
-            killer = await asyncio.create_subprocess_exec(
-                "taskkill", "/PID", str(proc.pid), "/T", "/F",
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-            )
-            await killer.wait()
-        else:
-            os.killpg(proc.pid, signal.SIGKILL)
-    except (ProcessLookupError, OSError):
-        pass
-    await proc.wait()
+        return await run_process(cmd, env, timeout)
+    except TimeoutError as exc:
+        raise LighthouseError(str(exc)) from None

@@ -68,7 +68,43 @@ rules:
         title: hreflang ведёт на недоступную страницу или редирект
         description: Альтернативные версии должны отвечать 200 без редиректов, иначе связь игнорируется.
         recommendation: Укажите в hreflang рабочие конечные URL.
-        message: "$lang → $target (ответ: $status)"
+        message: "hreflang=$lang, ответ: $status. Страниц с указанием: $pages ($examples)"
         fix: |
           Проверьте, что переведённая версия существует, и укажите её канонический URL
           (протокол, www, слэш на конце — как в canonical целевой страницы).
+
+  target_non_indexable:
+    severity: medium
+    params:
+      max_fetches: 100
+    refs: [https://developers.google.com/search/docs/specialty/international/localized-versions]
+    text:
+      ru:
+        title: hreflang указывает на неиндексируемую страницу
+        description: >-
+          В hreflang указана страница, закрытая noindex или с canonical на другой адрес. Google принимает
+          только связи между каноническими индексируемыми версиями, остальные игнорирует.
+        recommendation: Указывайте в hreflang канонические индексируемые URL языковых версий.
+        message:
+          noindex: "Страница закрыта noindex. Страниц с указанием: $pages ($examples)"
+          canonical: "Canonical страницы ведёт на $final. Страниц с указанием: $pages ($examples)"
+        fix: |
+          - Если языковая версия закрыта noindex по ошибке — уберите директиву.
+          - Если у неё canonical на другой адрес — укажите в hreflang именно этот адрес.
+          Каждая языковая версия должна иметь canonical на саму себя, а не на версию на основном языке.
+
+  duplicate_lang:
+    severity: medium
+    refs: [https://developers.google.com/search/docs/specialty/international/localized-versions]
+    text:
+      ru:
+        title: Несколько адресов для одного языка в hreflang
+        description: >-
+          Для одного кода языка указано несколько разных страниц. Поисковик не знает, какую показывать
+          пользователям этого языка, и может проигнорировать всю группу hreflang.
+        recommendation: Оставьте ровно один адрес на каждый код языка (и региона).
+        message: "hreflang=$lang указывает на разные адреса: $urls (кодов с повтором: $count)"
+        fix: |
+          Обычно повтор появляется, когда hreflang выводят и тема, и плагин мультиязычности, или когда
+          в группу попадают и старый, и новый адрес страницы. Оставьте один источник разметки; для разных
+          регионов одного языка используйте коды с регионом (`en-us`, `en-gb`).

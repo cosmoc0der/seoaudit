@@ -14,7 +14,7 @@ options:
 
 rules:
   performance_score:
-    severity: high
+    severity: medium
     scope: site
     params:
       min_score: 50
@@ -24,9 +24,12 @@ rules:
         title: Низкая оценка производительности Lighthouse
         description: >-
           Оценка производительности ниже $min_score/100. Lighthouse учитывает скорость отрисовки,
-          интерактивность и стабильность вёрстки — это напрямую связано с Core Web Vitals.
+          интерактивность и стабильность вёрстки в лабораторных условиях; в ранжировании Google
+          использует данные реальных посетителей (Core Web Vitals), но низкая оценка обычно предвещает плохие показатели.
         recommendation: Выполните рекомендации Lighthouse, начиная с тех, что дают наибольшую экономию времени.
-        message: "$strategy: $score/100. Главные резервы: $opportunities"
+        message:
+          default: "$device: $score/100. Главные резервы: $opportunities"
+          bare: "$device: $score/100"
         fix: |
           Запустите отчёт на https://pagespeed.web.dev/ для страницы из списка и пройдите по разделу
           «Возможности» сверху вниз. Типовые решения:
@@ -37,7 +40,7 @@ rules:
           - включить кэширование и CDN.
 
   lcp_slow:
-    severity: high
+    severity: medium
     scope: site
     params:
       max_ms: 2500
@@ -45,9 +48,11 @@ rules:
     text:
       ru:
         title: Медленная отрисовка основного контента (LCP)
-        description: Largest Contentful Paint больше $max_ms мс — пользователь долго ждёт появления главного контента.
+        description: >-
+          Largest Contentful Paint в лабораторном замере больше $max_ms мс — пользователь долго ждёт
+          появления главного контента.
         recommendation: Ускорьте загрузку LCP-элемента до $max_ms мс.
-        message: "$strategy: LCP $value мс"
+        message: "$device: LCP $value мс"
         fix: |
           ```html
           <!-- Главное изображение первого экрана -->
@@ -69,12 +74,12 @@ rules:
         title: Сдвиги макета при загрузке (CLS)
         description: Cumulative Layout Shift больше $max_value — элементы страницы «прыгают» при загрузке.
         recommendation: Зарезервируйте место под изображения, баннеры, шрифты и динамические блоки.
-        message: "$strategy: CLS $value"
+        message: "$device: CLS $value"
         fix: |
           - Задавайте `width`/`height` или `aspect-ratio` изображениям, видео и iframe.
           - Резервируйте место под рекламу и баннеры (`min-height`).
           - Не вставляйте контент поверх существующего (cookie-баннеры — `position: fixed`).
-          - Шрифты: `font-display: optional` или `size-adjust` для фолбэка.
+          - Шрифты: `font-display: optional` или `size-adjust` для резервного шрифта.
 
   tbt_high:
     severity: medium
@@ -87,12 +92,12 @@ rules:
         title: Долгая блокировка основного потока (TBT)
         description: Total Blocking Time больше $max_ms мс — тяжёлый JavaScript мешает странице реагировать на действия (влияет на INP).
         recommendation: Сократите объём и время выполнения JavaScript.
-        message: "$strategy: TBT $value мс"
+        message: "$device: TBT $value мс"
         fix: |
           - Разделите бандл (code splitting), грузите код по маршрутам.
           - Отложите сторонние скрипты (чаты, счётчики, виджеты) до взаимодействия или `requestIdleCallback`.
           - Разбивайте долгие задачи (> 50 мс) через `scheduler.yield()` / `setTimeout`.
-          - Удалите неиспользуемые полифилы и библиотеки.
+          - Удалите неиспользуемые полифиллы и библиотеки.
 
   field_cwv:
     severity: high
@@ -104,8 +109,10 @@ rules:
         description: >-
           По данным Chrome UX Report (реальные посетители за 28 дней) метрики не соответствуют
           «хорошему» уровню. Именно эти данные Google использует в ранжировании.
-        recommendation: Улучшите метрики, отмеченные как AVERAGE/SLOW.
-        message: "$strategy: $metrics"
+        recommendation: Улучшите метрики, которые требуют улучшения или в плохой зоне.
+        message:
+          default: "$device: $metrics"
+          origin: "$device: $metrics (данные по сайту целиком: у отдельных страниц мало посещений)"
         fix: |
           Ориентиры «хорошего» уровня (75-й перцентиль): LCP ≤ 2,5 с, INP ≤ 200 мс, CLS ≤ 0,1.
           Отслеживайте динамику в Google Search Console → «Основные интернет-показатели».
@@ -120,7 +127,7 @@ rules:
         title: Проблемы, найденные Lighthouse SEO
         description: Lighthouse обнаружил базовые SEO-проблемы при рендеринге страницы в браузере.
         recommendation: Исправьте перечисленные проблемы.
-        message: "$strategy: $audits"
+        message: "$device: $audits"
         fix: |
           Откройте отчёт на https://pagespeed.web.dev/ → раздел «Поисковая оптимизация» —
           для каждого пункта есть ссылка на документацию с инструкцией.

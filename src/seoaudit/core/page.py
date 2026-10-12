@@ -3,15 +3,25 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from functools import cached_property
-
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from seoaudit.core.http import FetchResult
-from seoaudit.core.urls import UrlScope
+from seoaudit.core.srcset import candidate_urls, pick_candidate, source_applies
+from seoaudit.core.urls import UrlScope, is_service_url
 
 _HTML_TYPES = ("text/html", "application/xhtml+xml")
 _WORD = re.compile(r"\w+", re.UNICODE)
 _NON_CONTENT_TAGS = ["script", "style", "noscript", "template", "svg", "iframe"]
+# Directives with a "name: value" form; any other "token:" prefix names the crawler the rest applies to.
+_VALUED_DIRECTIVES = {"max-snippet", "max-image-preview", "max-video-preview", "unavailable_after"}
+_LINK_HEADER = re.compile(r"<([^>]*)>([^<]*)")
+_CANONICAL_PARAM = re.compile(r'\brel\s*=\s*"?[^";,]*\bcanonical\b', re.I)
+_RAW_HEAD = re.compile(r"<head\b[^>]*>(.*?)(?:</head\s*>|<body\b)", re.I | re.S)
+_RAW_SKIP = re.compile(r"<!--.*?-->|<(script|style|noscript|template)\b.*?</\1\s*>", re.I | re.S)
+_HEAD_TAGS = re.compile(r"<(?:title|meta|link|base)\b", re.I)
+_NOSCRIPT_IMG = re.compile(r"<noscript\b(?:(?!</noscript).)*<img\b", re.I | re.S)
+_HEAD_META = {"robots", "description", "googlebot", "yandex", "viewport"}
+_HEAD_LINKS = {"canonical", "alternate"}
 
 
 @dataclass(frozen=True)
@@ -36,7 +46,8 @@ class Image:
     width: str | None
     height: str | None
     loading: str | None
-    srcset: str | None
+    delivered: str | None
+    variants: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -48,6 +59,13 @@ class Script:
     type: str
 
 
+@dataclass(frozen=True)
+class HeadBreak:
+    breaker: str
+    moved: list[str]
+    noscript_img: bool
+
+
 @dataclass(eq=False)
 class Page:
     url: str
@@ -57,6 +75,7 @@ class Page:
     source: str = "link"
     referrer: str | None = None
     html: str | None = field(default=None, repr=False)
+    robots_agent: str = "Googlebot"
 
     def __post_init__(self) -> None:
         if self.html is None and self.is_html and self.response.body:
@@ -98,13 +117,17 @@ class Page:
 
     @cached_property
     def tree(self) -> LexborHTMLParser:
-        return LexborHTMLParser(self.html or "")
+        tree = LexborHTMLParser(self.html or "")
+        # Browsers and Googlebot run scripts, so <noscript> fallbacks (async CSS, lazy-load images) are not in their DOM.
+        tree.strip_tags(["noscript"])
+        return tree
 
     @cached_property
     def base_url(self) -> str:
         node = self.tree.css_first("base[href]")
         href = node.attributes.get("href") if node else None
-        return self.scope.normalize(href, self.url) if href else self.url
+        # An unusable base (e.g. "#", "ftp:") leaves the document URL as the base, as in browsers.
+        return (self.scope.normalize(href, self.url) if href else None) or self.url
 
     def absolute(self, raw: str | None) -> str | None:
         return self.scope.normalize(raw, self.base_url) if raw else None
@@ -139,25 +162,68 @@ class Page:
         return values[0] if values else None
 
     @cached_property
+    def robots_sources(self) -> dict[str, set[str]]:
+        """Directives for the audited crawler by where they come from: generic ones plus those addressed to it."""
+        agent = self.robots_agent.lower()
+        meta = [*self.meta_tags.get("robots", []), *self.meta_tags.get(agent, [])]
+        return {
+            "meta": {d for v in meta for d in _robots_directives(v, agent)},
+            "header": _robots_directives(self.headers.get("x-robots-tag", ""), agent),
+        }
+
+    @cached_property
     def robots(self) -> set[str]:
-        values = [v for key in ("robots", "googlebot", "yandex") for v in self.meta_tags.get(key, [])]
-        values.append(self.headers.get("x-robots-tag", ""))
-        directives = {d.strip().lower() for v in values for d in v.split(",")}
+        directives = set().union(*self.robots_sources.values())
         if "none" in directives:
             directives |= {"noindex", "nofollow"}
-        return directives - {""}
+        return directives
 
-    def link_rel(self, rel: str) -> list[LexborNode]:
-        return [n for n in self.tree.css("link[rel]") if rel in (n.attributes.get("rel") or "").lower().split()]
+    def link_rel(self, rel: str, head_only: bool = False) -> list[LexborNode]:
+        nodes = self.tree.css("head link[rel]" if head_only else "link[rel]")
+        return [n for n in nodes if rel in (n.attributes.get("rel") or "").lower().split()]
 
     @cached_property
     def canonicals(self) -> list[str]:
-        return [u for n in self.link_rel("canonical") if (u := self.absolute(n.attributes.get("href")))]
+        """Google reads rel=canonical only in <head> or in the HTTP Link header."""
+        html = [n.attributes.get("href") for n in self.link_rel("canonical", head_only=True)]
+        header = [
+            m[1] for m in _LINK_HEADER.finditer(self.headers.get("link", "")) if _CANONICAL_PARAM.search(m[2])
+        ]
+        # The Link header is resolved against the request URL, not <base href>.
+        urls = [self.absolute(h) for h in html] + [self.scope.normalize(h, self.url) for h in header]
+        return [u for u in urls if u]
+
+    @cached_property
+    def canonical_tags(self) -> list[tuple[str, bool]]:
+        """Raw href and whether it sits in <head> for every <link rel=canonical>, ignored ones included."""
+        return [((n.attributes.get("href") or "").strip(), _inside(n, "head")) for n in self.link_rel("canonical")]
+
+    @cached_property
+    def hrefs(self) -> list[str]:
+        """Raw href of every link, including those `links` drops as unusable (javascript:, malformed)."""
+        return [(n.attributes.get("href") or "") for n in self.tree.css("a[href], area[href]")]
+
+    @cached_property
+    def head_break(self) -> HeadBreak | None:
+        """Search engines stop reading <head> at the first element that doesn't belong there (scripting off,
+        so a <noscript> with an <img> counts); head tags written after it end up in <body> and are ignored."""
+        match = _RAW_HEAD.search(self.html or "")
+        if not match:
+            return None
+        written = len(_HEAD_TAGS.findall(_RAW_SKIP.sub("", match[1])))
+        if len(self.tree.css("head title, head meta, head link, head base")) >= written:
+            return None
+        moved = [d for n in self.tree.css("body title, body meta, body link, body base") if (d := _describe_head_tag(n))]
+        if not moved or self.tree.body is None:
+            return None
+        first = next((n for n in self.tree.body.iter(include_text=True) if n.tag != "-text" or n.text().strip()), None)
+        breaker = "#text" if first is None or first.tag == "-text" else first.tag
+        return HeadBreak(breaker, moved, bool(_NOSCRIPT_IMG.search(match[1])))
 
     @cached_property
     def hreflangs(self) -> list[tuple[str, str]]:
         result = []
-        for node in self.link_rel("alternate"):
+        for node in self.link_rel("alternate", head_only=True):
             lang = node.attributes.get("hreflang")
             url = self.absolute(node.attributes.get("href"))
             if lang and url:
@@ -173,7 +239,7 @@ class Page:
         result = []
         for node in self.tree.css("a[href], area[href]"):
             url = self.absolute(node.attributes.get("href"))
-            if not url:
+            if not url or is_service_url(url):
                 continue
             attrs = node.attributes
             text = _text(node) or (attrs.get("aria-label") or attrs.get("title") or "").strip()
@@ -197,15 +263,17 @@ class Page:
         for node in self.tree.css("img"):
             attrs = node.attributes
             raw = (attrs.get("src") or attrs.get("data-src") or "").strip()
+            src = self.absolute(raw)
             result.append(
                 Image(
-                    src=self.absolute(raw),
+                    src=src,
                     raw_src=raw,
                     alt=attrs.get("alt") if "alt" in attrs else None,
                     width=attrs.get("width"),
                     height=attrs.get("height"),
                     loading=(attrs.get("loading") or "").lower() or None,
-                    srcset=attrs.get("srcset"),
+                    delivered=self.absolute(_delivered(node)) or src,
+                    variants=tuple(dict.fromkeys(u for raw in [raw, *_offered(node)] if (u := self.absolute(raw)))),
                 )
             )
         return result
@@ -248,6 +316,52 @@ class Page:
     @cached_property
     def word_count(self) -> int:
         return len(_WORD.findall(self.text_content))
+
+
+def _robots_directives(value: str, agent: str) -> set[str]:
+    """Parses "noindex, googlebot: nofollow, otherbot: noindex": a crawler prefix applies to what follows it."""
+    result = set()
+    applies = True
+    for item in value.lower().split(","):
+        name, sep, rest = item.partition(":")
+        if sep and name.strip() not in _VALUED_DIRECTIVES:
+            applies = name.strip() == agent
+            item = rest
+        if applies and item.strip():
+            result.add(item.strip())
+    return result
+
+
+def _delivered(img: LexborNode) -> str | None:
+    """Browsers take the first fitting <picture> source, then the srcset candidate for the slot, not src."""
+    parent = img.parent
+    if parent is not None and parent.tag == "picture":
+        for source in parent.css("source"):
+            attrs = source.attributes
+            if attrs.get("srcset") and source_applies(attrs.get("type"), attrs.get("media")):
+                return pick_candidate(attrs.get("srcset"), attrs.get("sizes"))
+    attrs = img.attributes
+    return pick_candidate(attrs.get("srcset") or attrs.get("data-srcset"), attrs.get("sizes"))
+
+
+def _offered(img: LexborNode) -> list[str]:
+    """Every file the markup offers: which one loads depends on the screen, so a broken one hits someone."""
+    parent = img.parent
+    nodes = [*parent.css("source"), img] if parent is not None and parent.tag == "picture" else [img]
+    return [u for n in nodes for u in candidate_urls(n.attributes.get("srcset") or n.attributes.get("data-srcset"))]
+
+
+def _describe_head_tag(node: LexborNode) -> str | None:
+    """Only tags that matter to search engines; <meta itemprop> and <link rel=stylesheet> are fine in <body>."""
+    attrs = node.attributes
+    if node.tag in ("title", "base"):
+        return None if _inside(node, "svg") else f"<{node.tag}>"
+    if node.tag == "meta" and (name := (attrs.get("name") or "").lower()) in _HEAD_META:
+        return f'<meta name="{name}">'
+    rel = set((attrs.get("rel") or "").lower().split()) & _HEAD_LINKS if node.tag == "link" else set()
+    if "canonical" in rel or ("alternate" in rel and attrs.get("hreflang")):
+        return '<link rel="canonical">' if "canonical" in rel else f'<link hreflang="{attrs.get("hreflang")}">'
+    return None
 
 
 def _text(node: LexborNode) -> str:

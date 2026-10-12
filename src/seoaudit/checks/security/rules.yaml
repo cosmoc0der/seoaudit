@@ -16,7 +16,7 @@ rules:
           1. Выпустите бесплатный сертификат Let's Encrypt: `certbot --nginx -d example.com -d www.example.com`.
           2. Настройте 301-редирект со всех http:// адресов на https://.
           3. Замените внутренние ссылки и пути к ресурсам на https://.
-          4. Добавьте https-версию в Google Search Console и Яндекс.Вебмастер.
+          4. Добавьте https-версию в Google Search Console и Яндекс Вебмастер.
 
   http_redirect:
     severity: high
@@ -29,6 +29,7 @@ rules:
         message:
           none: "http:// отвечает $status без редиректа на HTTPS"
           temporary: "Используется временный редирект $status вместо 301"
+          chain: "Редирект на HTTPS идёт через промежуточный HTTP-адрес"
         fix: |
           ```nginx
           server {
@@ -178,7 +179,8 @@ rules:
         title: Cookie без флагов безопасности
         description: >-
           Cookie без Secure могут передаваться по HTTP, без HttpOnly — читаться скриптами (кража сессии при XSS),
-          без SameSite — использоваться в CSRF-атаках.
+          без SameSite — отправляться с чужих сайтов (CSRF; Chrome по умолчанию ограничивает такие cookie,
+          Safari и Firefox — нет). HttpOnly требуется только для cookie, похожих на сессионные.
         recommendation: Установите флаги Secure, HttpOnly и SameSite.
         message: "Cookie «$cookie»: нет $issues"
         fix: |
@@ -214,7 +216,7 @@ rules:
         message: "Ссылок: $count (например: $examples)"
         fix: |
           ```html
-          <a href="https://partner.com" target="_blank" rel="noopener noreferrer">Партнёр</a>
+          <a href="https://example.org/" target="_blank" rel="noopener noreferrer">Внешний сайт</a>
           ```
 
   sensitive_files:
@@ -258,4 +260,4 @@ rules:
           2. Удалите резервные копии и дампы из публичной директории.
           3. Если был доступен `.git` или `.env` — считайте все секреты скомпрометированными:
              смените пароли БД, ключи API, токены.
-          4. Деплойте только собранный артефакт, без служебных директорий.
+          4. Выкладывайте на сервер только результат сборки, без служебных директорий.

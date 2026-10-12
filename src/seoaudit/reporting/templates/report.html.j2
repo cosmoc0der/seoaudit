@@ -6,14 +6,15 @@
   <circle class="gauge__track" cx="{{ half }}" cy="{{ half }}" r="{{ r }}" stroke-width="{{ stroke }}" fill="none"/>
   {% if score %}
   <circle class="gauge__value" cx="{{ half }}" cy="{{ half }}" r="{{ r }}" stroke-width="{{ stroke }}" fill="none"
-          stroke-linecap="round" stroke-dasharray="{{ c * score / 100 }} {{ c }}" transform="rotate(-90 {{ half }} {{ half }})"/>
+          stroke-dasharray="{{ c * score / 100 }} {{ c }}" transform="rotate(-90 {{ half }} {{ half }})"/>
   {% endif %}
-  <text x="50%" y="50%" dy="0.35em" text-anchor="middle" class="gauge__text" font-size="{{ size * 0.3 }}">{{ score if score is not none else "—" }}</text>
+  <text x="50%" y="50%" dy="0.35em" text-anchor="middle" class="gauge__text" font-size="{{ size * 0.28 }}">{{ score if score is not none else "—" }}</text>
 </svg>
 {%- endmacro %}
 
-{% macro note(value) -%}
-{{ t.notes[value] if value in t.notes else value }}
+{# Raw exception text from a failed check is for the operator (see diagnostics), not for the client. #}
+{% macro note(rule) -%}
+{{ t.notes[rule.note] if rule.note in t.notes else "" if rule.status == Status.ERROR else rule.note or "" }}
 {%- endmacro %}
 
 {% macro badge(severity) -%}
@@ -42,7 +43,7 @@
     <div class="cover__url">{{ report.final_url|pretty_url }}</div>
 
     <div class="cover__score">
-      {{ gauge(report.score, 190, 14) }}
+      {{ gauge(report.score, 180, 5) }}
       <div class="cover__grade">
         <div class="grade grade--{{ report.score|score_class }}">{{ report.grade }}</div>
         <div class="cover__grade-text">{{ t.grade[report.grade] }}</div>
@@ -51,7 +52,7 @@
     </div>
 
     <div class="counters">
-      {% for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW] %}
+      {% for sev in scored_severities %}
       <div class="counter counter--{{ sev }}">
         <div class="counter__value">{{ severity_counts[sev] }}</div>
         <div class="counter__label">{{ t.severity_plural[sev] }}</div>
@@ -67,40 +68,90 @@
   <div class="cover__meta">
     <div><span>{{ t.audit_date }}</span><strong>{{ report.started_at.strftime("%d.%m.%Y") }}</strong></div>
     <div><span>{{ t.pages_crawled }}</span><strong>{{ report.stats.html_pages }}</strong></div>
-    <div><span>{{ t.issues }}</span><strong>{{ report.count(Status.FAILED) }} / {{ report.rules()|length }}</strong></div>
+    <div><span>{{ t.issues }}</span><strong>{{ issue_count }} / {{ report.rules()|length }} {{ t.checks_total }}</strong></div>
   </div>
 </section>
 
+{% set total_pages = report.stats.html_pages %}
 <section class="page">
-  <h2 class="section-title">{{ t.summary }}</h2>
+  <h2 class="section-title">{{ t.exec_title }}</h2>
+
+  <div class="verdict">
+    {{ gauge(report.score, 84, 4) }}
+    <div class="verdict__body">
+      <p class="verdict__text">{{ t.verdict[report.grade] }}</p>
+      <p class="muted">{{ t.verdict_counts.format(issues=issue_count, urgent=severity_counts[Severity.CRITICAL] + severity_counts[Severity.HIGH]) }}</p>
+      {% if issue_count %}
+      <div class="stack">
+        {% for sev in scored_severities if severity_counts[sev] %}
+        <span class="stack__seg counter--{{ sev }}" style="flex: {{ severity_counts[sev] }}"></span>
+        {% endfor %}
+      </div>
+      <div class="legend__badges">
+        {% for sev in scored_severities if severity_counts[sev] %}<span>{{ badge(sev) }} {{ severity_counts[sev] }}</span>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
 
   <div class="card">
     <h3 class="card__title">{{ t.category_scores }}</h3>
     {% for c in report.categories %}
+    {% set n = c.failed|rejectattr("severity", "equalto", Severity.INFO)|list|length %}
     <div class="cat-row">
-      <span class="cat-row__name">{{ c.name }}</span>
+      <span class="cat-row__name">{% if c in shown_categories %}<a href="#cat-{{ c.id }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}</span>
       <span class="bar"><span class="bar__fill bar__fill--{{ c.score|score_class }}" style="width: {{ c.score or 0 }}%"></span></span>
       <span class="cat-row__score score--{{ c.score|score_class }}">{{ c.score if c.score is not none else "—" }}</span>
-      <span class="cat-row__issues">{% if c.failed %}{{ c.failed|length }} {{ c.failed|length|plural(t.issues_forms) }}{% endif %}</span>
+      <span class="cat-row__issues">{% if n %}{{ n }} {{ n|plural(t.issues_forms) }}{% elif c.score is none %}{{ t.status.not_applicable|lower }}{% endif %}</span>
     </div>
     {% endfor %}
   </div>
 
-  <h3 class="subsection-title">{{ t.top_issues }}</h3>
-  {% set top = report.top_issues(12) %}
-  {% if top %}
-  <table class="table">
-    <thead><tr><th style="width: 22mm"></th><th>{{ t.issue }}</th><th>{{ t.category }}</th><th class="num">{{ t.affected_short }}</th></tr></thead>
+  {% set risks = report.top_issues(5) %}
+  {% if risks %}
+  <h3 class="subsection-title">{{ t.exec_risks }}</h3>
+  <ol class="risks">
+    {% for rule in risks %}
+    <li class="risk issue--{{ rule.severity }}">
+      <div class="risk__head">
+        <a href="#{{ rule.id }}">{{ rule.title }}</a>
+        <span class="risk__scale">
+          {% if rule.scope == "page" and total_pages %}
+          {{ t.scale_pages.format(n=rule.affected, total=total_pages, share=[100, (100 * rule.affected / total_pages)|round|int]|min) }}
+          {% else %}
+          {{ t.scale_site.format(n=rule.affected) }}
+          {% endif %}
+        </span>
+        {{ badge(rule.severity) }}
+      </div>
+      <p class="risk__impact">{{ rule.description|md_inline }}</p>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+</section>
+
+<section class="page">
+  <h2 class="section-title">{{ t.plan_title }}</h2>
+  {% if plan %}
+  <p class="muted">{{ t.plan_intro }}</p>
+  <table class="table plan">
+    <thead><tr><th style="width: 12mm"></th><th>{{ t.issue }}</th><th style="width: 24mm"></th><th>{{ t.category }}</th><th class="num">{{ t.affected_short }}</th></tr></thead>
+    {% for phase, rules in plan.items() %}
     <tbody>
-    {% for rule in top %}
+      <tr class="plan__phase"><td colspan="5">{{ t.phases[phase] }}</td></tr>
+      {% for rule in rules %}
       <tr>
-        <td>{{ badge(rule.severity) }}</td>
+        <td class="muted"><a href="#{{ rule.id }}">{{ issue_numbers[rule.id] }}</a></td>
         <td><a href="#{{ rule.id }}">{{ rule.title }}</a></td>
+        <td>{{ badge(rule.severity) }}</td>
         <td class="muted">{{ category_names[rule.category] }}</td>
         <td class="num">{{ rule.affected }}</td>
       </tr>
-    {% endfor %}
+      {% endfor %}
     </tbody>
+    {% endfor %}
   </table>
   {% else %}
   <p class="muted">{{ t.no_issues }}</p>
@@ -108,15 +159,14 @@
 
   <div class="legend">
     <h3 class="card__title">{{ t.legend_title }}</h3>
-    <p>{{ t.legend_text }}</p>
-    <div class="legend__badges">
-      {% for sev in Severity %}{{ badge(sev) }}{% endfor %}
-    </div>
+    <p>{{ t.legend_text }}{% if config.include_recommendations %} {{ t.legend_recommendations }}{% endif %}</p>
     <p class="muted">{{ t.score_text }}</p>
   </div>
 </section>
 
-{% for c in report.categories %}
+{% for c in shown_categories %}
+{% set cat_no = loop.index %}
+{% set issues = c.failed|rejectattr("severity", "equalto", Severity.INFO)|list %}
 <section class="page category" id="cat-{{ c.id }}">
   <header class="category__header">
     <div>
@@ -124,44 +174,51 @@
       <h2 class="category__title">{{ c.name }}</h2>
       <p class="muted">{{ c.description }}</p>
       <div class="chips">
-        <span class="chip chip--failed">{{ t.status.failed }}: {{ c.count(Status.FAILED) }}</span>
-        <span class="chip chip--passed">{{ t.status.passed }}: {{ c.count(Status.PASSED) }}</span>
+        <span class="chip chip--failed">{{ t.chips.failed }}: {{ issues|length }}</span>
+        <span class="chip chip--passed">{{ t.chips.passed }}: {{ c.count(Status.PASSED) }}</span>
       </div>
     </div>
-    {{ gauge(c.score, 92, 9) }}
+    {{ gauge(c.score, 84, 4) }}
   </header>
 
-  {% for rule in c.failed %}
-  {% set shown = rule.findings[:config.max_urls_per_rule] %}
+  {% for rule in issues %}
+  {% set rows = rule.findings|by_url %}
+  {% set shown = rows[:config.max_urls_per_rule] %}
   {% set has_messages = rule.findings | selectattr("message") | list | length > 0 %}
   <article class="issue issue--{{ rule.severity }}" id="{{ rule.id }}">
-    <header class="issue__header">
-      {{ badge(rule.severity) }}
-      <h3 class="issue__title">{{ rule.title }}</h3>
-      {% if rule.findings %}<span class="issue__count">{{ t.affected }}: {{ rule.affected }}</span>{% endif %}
-    </header>
-
-    {% if rule.description %}<p class="issue__desc">{{ rule.description }}</p>{% endif %}
-    {% if rule.recommendation %}
-    <div class="callout"><strong>{{ t.what_to_do }}:</strong> {{ rule.recommendation|md|striptags }}</div>
-    {% endif %}
+    <div class="issue__lead">
+      <header class="issue__header">
+        <span class="issue__num">{{ cat_no }}.{{ loop.index }}</span>
+        <h3 class="issue__title">{{ rule.title }}</h3>
+        {{ badge(rule.severity) }}
+        {% if rule.findings %}<span class="issue__count">· {{ t.affected }}: {{ rule.affected }}</span>{% endif %}
+      </header>
+      <div class="issue__body">
+        {% if rule.description %}<p class="issue__desc">{{ rule.description|md_inline }}</p>{% endif %}
+        {% if config.include_recommendations and rule.recommendation %}
+        <div class="callout"><strong>{{ t.what_to_do }}:</strong> {{ rule.recommendation|md_inline }}</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="issue__body">
 
     {% if shown and (shown[0].url or has_messages) %}
-    <div class="block-title">{{ t.affected_urls }}</div>
     <table class="findings">
+      <thead><tr><th colspan="2">{{ t.affected_urls }} <span class="findings__ref">· {{ cat_no }}.{{ loop.index }} {{ rule.title }}</span></th></tr></thead>
       {% for f in shown %}
       <tr>
-        {% if f.url %}<td class="findings__url">{{ f.url|pretty_url }}</td>{% endif %}
-        {% if has_messages %}<td class="findings__msg">{{ f.message or "" }}</td>{% endif %}
+        {% if f.url %}<td class="findings__url">{{ f.url|pretty_url|local_urls(origin)|wbr }}</td>{% endif %}
+        {% if has_messages %}<td class="findings__msg">{{ f.message|local_urls(origin) }}</td>{% endif %}
       </tr>
       {% endfor %}
     </table>
-    {% if rule.findings|length > shown|length %}
-    <p class="more">{{ t.more_urls.format(n=rule.findings|length - shown|length) }}</p>
+    {% if rows|length > shown|length %}
+    {% set more = t.more_urls_csv if "csv" in config.formats else t.more_urls %}
+    <p class="more">{{ more.format(n=rows|length - shown|length) }}</p>
     {% endif %}
     {% endif %}
 
-    {% if rule.fix %}
+    {% if config.include_recommendations and rule.fix %}
     <div class="fix">
       <div class="block-title">{{ t.dev_instructions }}</div>
       {{ rule.fix|md }}
@@ -173,17 +230,27 @@
       {% for ref in rule.refs %}<a href="{{ ref }}">{{ ref }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
     </div>
     {% endif %}
-    {% if rule.note %}<div class="refs">{{ note(rule.note) }}</div>{% endif %}
+    {% if note(rule) %}<div class="refs">{{ note(rule) }}</div>{% endif %}
+    </div>
   </article>
   {% endfor %}
 
-  {% set passed = c.rules | selectattr("status", "equalto", Status.PASSED) | list %}
-  {% if config.include_passed and passed %}
+  {% set fyi = c.failed|selectattr("severity", "equalto", Severity.INFO)|list %}
+  {% if fyi %}
   <div class="passed">
-    <div class="block-title">{{ t.passed_checks }}</div>
-    <ul class="checklist">
-      {% for rule in passed %}<li class="checklist__item checklist__item--passed">{{ rule.title }}</li>{% endfor %}
-    </ul>
+    <div class="block-title">{{ t.for_info }} <span class="muted">— {{ t.for_info_text }}</span></div>
+    <table class="findings fyi">
+      {% for rule in fyi %}
+      <tr id="{{ rule.id }}">
+        {% set found = rule.findings|map(attribute="message")|select|list if rule.scope == "site" else [] %}
+        <td class="fyi__title">{{ rule.title }}{% if rule.findings and not found %} <span class="muted">· {{ rule.affected }}</span>{% endif %}</td>
+        <td class="findings__msg">
+          {{ rule.description|md_inline }}
+          {% if found %}<div class="muted">{{ t.scale_site.format(n=found|join("; ")) }}</div>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
   </div>
   {% endif %}
 
@@ -191,10 +258,10 @@
   {% if other %}
   <div class="passed">
     <div class="block-title">{{ t.other_checks }}</div>
-    <ul class="checklist">
+    <ul class="checklist checklist--notes">
       {% for rule in other %}
       <li class="checklist__item checklist__item--{{ rule.status }}">
-        {{ rule.title }} <span class="muted">— {{ t.status[rule.status] }}{% if rule.note %}: {{ note(rule.note) }}{% endif %}</span>
+        {{ rule.title }} <span class="muted">— {{ t.status[rule.status]|lower }}{% if note(rule) %}: {{ note(rule) }}{% endif %}</span>
       </li>
       {% endfor %}
     </ul>
@@ -202,6 +269,18 @@
   {% endif %}
 </section>
 {% endfor %}
+
+{% macro chart(rows) -%}
+<div class="chart">
+  {% for label, n, width in rows %}
+  <div class="chart__row">
+    <span class="chart__label">{{ label }}</span>
+    <span class="bar"><span class="bar__fill bar__fill--neutral" style="width: {{ width }}%"></span></span>
+    <span class="num">{{ n }}</span>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
 
 <section class="page">
   <h2 class="section-title">{{ t.appendix }}</h2>
@@ -212,21 +291,56 @@
     {% endfor %}
   </div>
 
-  <h3 class="subsection-title">{{ t.crawled_pages }}</h3>
+  <div class="charts">
+    <div><h3 class="subsection-title">{{ t.status_chart }}</h3>{{ chart(status_chart) }}</div>
+    <div><h3 class="subsection-title">{{ t.depth_chart }}</h3>{{ chart(depth_chart) }}</div>
+  </div>
+
+  {% set limit = config.max_urls_per_rule * 3 %}
+  {% if problem_pages %}
+  <h3 class="subsection-title">{{ t.problem_pages }}</h3>
   <table class="table table--compact">
-    <thead><tr><th>URL</th><th class="num">{{ t.status_code }}</th><th class="num">{{ t.depth }}</th><th class="num">{{ t.ttfb }}</th></tr></thead>
+    <thead><tr><th>URL</th><th class="num">{{ t.status_code }}</th></tr></thead>
     <tbody>
-    {% for p in report.pages[:300] %}
+    {% for p in problem_pages[:limit] %}
       <tr>
-        <td class="findings__url">{{ p.url|pretty_url }}</td>
+        <td class="findings__url">{{ p.url|pretty_url|local_urls(origin)|wbr }}</td>
         <td class="num status-{{ (p.status or 0) // 100 }}xx">{{ p.status or "—" }}</td>
-        <td class="num">{{ p.depth if p.depth is not none else "—" }}</td>
-        <td class="num">{{ p.ttfb_ms or "—" }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-  {% if report.pages|length > 300 %}<p class="more">{{ t.more_urls.format(n=report.pages|length - 300) }}</p>{% endif %}
+  {% if problem_pages|length > limit %}<p class="more">{{ t.more_urls.format(n=problem_pages|length - limit) }}</p>{% endif %}
+  {% endif %}
+
+  {% if slow_pages %}
+  <h3 class="subsection-title">{{ t.slow_pages }}</h3>
+  <table class="table table--compact">
+    <thead><tr><th>URL</th><th class="num">{{ t.ttfb }}</th></tr></thead>
+    <tbody>
+    {% for p in slow_pages %}
+      <tr><td class="findings__url">{{ p.url|pretty_url|local_urls(origin)|wbr }}</td><td class="num">{{ p.ttfb_ms|round|int }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% set passed = report.rules()|selectattr("status", "equalto", Status.PASSED)|list %}
+  {% if config.include_passed and passed %}
+  <h3 class="subsection-title">{{ t.passed_checks }} <span class="muted">· {{ passed|length }}</span></h3>
+  <p class="muted">{{ t.passed_intro }}</p>
+  {% for c in report.categories %}
+  {% set rules = c.rules|selectattr("status", "equalto", Status.PASSED)|list %}
+  {% if rules %}
+  <div class="passed-group">
+    <div class="block-title">{{ c.name }}</div>
+    <ul class="checklist">
+      {% for rule in rules %}<li class="checklist__item checklist__item--passed">{{ rule.title }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% endfor %}
+  {% endif %}
 
   {% if report.diagnostics %}
   <h3 class="subsection-title">{{ t.diagnostics }}</h3>

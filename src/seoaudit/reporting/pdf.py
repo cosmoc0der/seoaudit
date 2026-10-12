@@ -12,9 +12,10 @@ from seoaudit.reporting.html import render_html
 INSTALL_HINT = 'PDF needs Playwright: pip install "seoaudit[browser]" && playwright install --only-shell chromium'
 
 _FOOTER = """
-<div style="width:100%;font-size:8px;color:#94a3b8;padding:0 14mm;display:flex;justify-content:space-between;
+<div style="width:100%;font-size:7.5pt;color:#77746d;padding:0 14mm;display:flex;justify-content:space-between;
             font-family:'Segoe UI',Roboto,Arial,sans-serif;">
   <span>{label}</span>
+  <span>{date}</span>
   <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
 </div>
 """
@@ -44,7 +45,7 @@ def write_pdf(report: AuditReport, path: Path, config: ReportConfig) -> None:
                 print_background=True,
                 display_header_footer=True,
                 header_template="<span></span>",
-                footer_template=_FOOTER.format(label=escape(label)),
+                footer_template=_FOOTER.format(label=escape(label), date=report.started_at.strftime("%d.%m.%Y")),
                 margin={"top": "14mm", "bottom": "16mm", "left": "0", "right": "0"},
             )
         finally:

@@ -2,7 +2,7 @@ category: indexability
 
 rules:
   robots_missing:
-    severity: medium
+    severity: low
     scope: site
     refs: [https://developers.google.com/search/docs/crawling-indexing/robots/intro]
     text:
@@ -10,7 +10,8 @@ rules:
         title: Нет файла robots.txt
         description: >-
           robots.txt управляет сканированием сайта: закрывает служебные разделы, указывает
-          путь к sitemap. Без него роботы тратят краулинговый бюджет на мусорные URL.
+          путь к sitemap. Без файла поисковики сканируют всё подряд — для больших сайтов это
+          лишняя нагрузка и расход лимита сканирования.
         recommendation: Создайте robots.txt в корне сайта.
         fix: |
           Файл должен отдаваться по адресу `/robots.txt` с кодом 200 и `Content-Type: text/plain`:
@@ -50,7 +51,7 @@ rules:
       agents: [Googlebot, Yandex]
     text:
       ru:
-        title: robots.txt закрывает сайт от индексации
+        title: robots.txt запрещает сканирование главной страницы
         description: Главная страница запрещена к сканированию для поискового робота — сайт выпадет из выдачи.
         recommendation: Уберите запрещающее правило для главной и основных разделов.
         message: "Сканирование запрещено для $agent"
@@ -61,8 +62,8 @@ rules:
           Disallow: /
           ```
           Оно часто остаётся после разработки на тестовом домене. Замените на точечные запреты
-          служебных разделов. Проверьте результат в Google Search Console → «Инструмент проверки robots.txt»
-          и в Яндекс.Вебмастере → «Анализ robots.txt».
+          служебных разделов. Проверьте результат в Google Search Console → «Настройки» → «Файл robots.txt»
+          и в Яндекс Вебмастере → «Инструменты» → «Анализ robots.txt».
 
   robots_no_sitemap:
     severity: low
@@ -91,11 +92,11 @@ rules:
           1. Настройте автоматическую генерацию sitemap (плагин CMS или скрипт по расписанию).
           2. Включайте только канонические индексируемые URL с кодом 200.
           3. До 50 000 URL / 50 МБ на файл, при большем объёме — sitemap index.
-          4. Укажите карту в robots.txt и добавьте в Google Search Console и Яндекс.Вебмастер.
+          4. Укажите карту в robots.txt и добавьте в Google Search Console и Яндекс Вебмастер.
           ```xml
           <?xml version="1.0" encoding="UTF-8"?>
           <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-            <url><loc>https://example.com/</loc><lastmod>2023-09-15</lastmod></url>
+            <url><loc>https://example.com/razdel/stranica/</loc><lastmod>2026-01-15</lastmod></url>
           </urlset>
           ```
 
@@ -125,16 +126,18 @@ rules:
         title: В sitemap есть неканонические или недоступные URL
         description: >-
           Карта сайта должна содержать только индексируемые страницы с кодом 200. Мусорные URL
-          снижают доверие поисковика к sitemap и тратят краулинговый бюджет.
-        recommendation: Исключите из sitemap редиректы, ошибки, noindex и неканонические страницы.
+          снижают доверие поисковика к sitemap и расходуют лимит сканирования.
+        recommendation: Исключите из sitemap редиректы, ошибки, noindex, неканонические и закрытые в robots.txt страницы.
         message:
           error: "Ответ: $status"
           redirect: "Редирект на $target"
           noindex: "Страница закрыта noindex"
           canonical: "Canonical указывает на $target"
+          blocked: "Закрыта от сканирования в robots.txt"
         fix: |
           Добавьте в генератор sitemap фильтр: только страницы со статусом 200, без noindex,
-          у которых canonical совпадает с собственным URL. Для редиректов — указывайте конечный URL.
+          не закрытые в robots.txt, у которых canonical совпадает с собственным URL.
+          Для редиректов — указывайте конечный URL.
 
   home_noindex:
     severity: critical
@@ -176,7 +179,7 @@ rules:
         recommendation: Добавьте самоссылающийся canonical на каждую индексируемую страницу.
         fix: |
           ```html
-          <link rel="canonical" href="https://example.com/catalog/notebooks/">
+          <link rel="canonical" href="https://example.com/razdel/stranica/">
           ```
           URL — абсолютный, совпадает с адресом страницы без GET-параметров отслеживания.
           Для страниц-дублей указывайте адрес основной страницы.
@@ -231,17 +234,19 @@ rules:
     text:
       ru:
         title: Цепочки редиректов
-        description: Каждый дополнительный редирект замедляет загрузку и теряет часть ссылочного веса.
+        description: >-
+          Каждый дополнительный редирект замедляет загрузку и сканирование; Googlebot проходит
+          не более 10 переходов подряд, а длинные цепочки чаще ломаются.
         recommendation: Настройте прямой редирект с исходного URL на конечный за один шаг.
-        message: "$hops редиректа: $chain"
+        message: "Редиректов: $hops — $chain"
         fix: |
-          Типичная цепочка: `http://site.ru` → `https://site.ru` → `https://www.site.ru` → `/home/`.
+          Типичная цепочка: `http://example.com` → `https://example.com` → `https://www.example.com` → `/home/`.
           Объедините правила так, чтобы любой вариант сразу вёл на канонический URL. nginx:
           ```nginx
           server {
             listen 80;
-            server_name site.ru www.site.ru;
-            return 301 https://www.site.ru$request_uri;
+            server_name example.com www.example.com;
+            return 301 https://www.example.com$request_uri;
           }
           ```
           Также обновите внутренние ссылки, чтобы они вели сразу на конечные адреса.
@@ -251,7 +256,9 @@ rules:
     text:
       ru:
         title: Временные редиректы (302/307)
-        description: Временный редирект сообщает, что старый URL вернётся, поэтому вес передаётся медленнее.
+        description: >-
+          Временный редирект сообщает поисковику, что старый адрес вернётся, поэтому в индексе
+          может остаться старый URL вместо нового.
         recommendation: Для постоянных переездов используйте 301 или 308.
         message: "$status → $target"
         fix: |
@@ -272,8 +279,9 @@ rules:
         recommendation: Проверьте, что закрыты только служебные разделы.
         message: "Входящих ссылок: $inlinks"
         fix: |
-          Если страница должна быть в поиске — уберите правило Disallow. Если нет — рассмотрите
-          удаление ссылок на неё или добавление `rel="nofollow"`, чтобы не тратить бюджет сканирования.
+          Если страница должна быть в поиске — уберите правило Disallow. Если нет — уберите ссылки
+          на неё из шаблонов. Учтите: закрытый в robots.txt URL может попасть в индекс без содержимого,
+          если на него есть ссылки; чтобы исключить его из поиска, откройте сканирование и поставьте noindex.
 
   orphan_pages:
     severity: low
@@ -299,7 +307,7 @@ rules:
           До страницы больше $max_depth кликов от главной. Чем глубже страница, тем реже её
           сканируют и тем меньше веса она получает.
         recommendation: Сократите путь до важных страниц до $max_depth кликов.
-        message: "Глубина: $depth кликов"
+        message: "Кликов от главной: $depth"
         fix: |
           Добавьте ссылки на глубокие разделы в меню, футер, хлебные крошки, HTML-карту сайта.
           Для каталогов увеличьте число товаров на странице или используйте фильтры вместо
@@ -329,3 +337,298 @@ rules:
           RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
           RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
           ```
+
+  home_unavailable:
+    severity: critical
+    scope: site
+    text:
+      ru:
+        title: Главная страница отвечает ошибкой
+        description: >-
+          Главная — точка входа для роботов и самая сильная страница сайта. Если она не отдаёт 200,
+          Яндекс считает это фатальной проблемой сайта, а сама страница со временем выпадает из индекса.
+        recommendation: Добейтесь стабильного ответа 200 на главной странице.
+        message: "Ответ: $status"
+        fix: |
+          1. Проверьте логи веб-сервера и приложения в момент запроса к `/`.
+          2. Ответ 403 — обычно правила WAF или антибот-защиты: разрешите доступ поисковым роботам.
+          3. Код 503 допустим только на время техработ и с заголовком `Retry-After`.
+
+  soft_404_setup:
+    severity: high
+    scope: site
+    refs: [https://developers.google.com/search/docs/crawling-indexing/http-network-errors#soft-404-errors]
+    text:
+      ru:
+        title: Несуществующие страницы не отдают 404
+        description: >-
+          Сервер отвечает 200 на адрес, которого нет на сайте. Опечатки в ссылках и мусорные URL превращаются
+          в пустые страницы-дубли, а краулинговый бюджет тратится впустую. В Яндекс Вебмастере это диагностика
+          «Некорректно настроена обработка несуществующих страниц».
+        recommendation: Отдавайте код 404 или 410 для любых несуществующих адресов.
+        message:
+          default: "Несуществующий адрес отвечает 200"
+          redirect: "Несуществующий адрес перенаправляет на $target, который отвечает 200"
+        fix: |
+          - Последним маршрутом в роутере приложения должен быть обработчик, который отдаёт страницу ошибки
+            со статусом 404, а не 200.
+          - SPA (React, Vue): fallback на `index.html` с кодом 200 для любых путей — источник проблемы.
+            Неизвестные маршруты должны получать статус 404 от сервера или SSR.
+          - Не перенаправляйте несуществующие адреса на главную: Google считает такие редиректы soft 404.
+          nginx:
+          ```nginx
+          location / { try_files $uri $uri/ =404; }
+          error_page 404 /404.html;
+          ```
+
+  robots_syntax:
+    severity: medium
+    scope: site
+    refs:
+      - https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt
+      - https://yandex.ru/support/webmaster/ru/controlling-robot/robots-txt
+    text:
+      ru:
+        title: Ошибки в robots.txt
+        description: >-
+          Строки, которые поисковики не понимают, молча игнорируются: запреты и разрешения работают
+          не так, как задумано.
+        recommendation: Исправьте указанные строки robots.txt.
+        message:
+          syntax: "Строки не в формате «директива: значение» (строк: $count): $lines"
+          unknown: "Неподдерживаемые директивы (строк: $count): $lines"
+          no_agent: "Allow/Disallow до первой директивы User-agent (строк: $count): $lines"
+          sitemap: "Sitemap указан относительным адресом (строк: $count): $lines"
+          non_ascii: "Кириллица или другие не-ASCII символы (строк: $count): $lines"
+          too_large: "Размер файла: $size_kb КБ, лимит — 500 КБ"
+        fix: |
+          - Каждое правило — отдельной строкой `Директива: значение`; Allow и Disallow идут после `User-agent`.
+          - Директивы вроде `Noindex:` или `Request-rate:` не поддерживаются ни Google, ни Яндексом —
+            удалите их. Запрет индексации задаётся meta robots на самой странице.
+          - Sitemap указывайте абсолютным URL: `Sitemap: https://example.com/sitemap.xml`.
+          - Яндекс не принимает кириллицу: домен пишите в punycode, пути — в URL-кодировке.
+          - Google читает только первые 500 КиБ файла, Яндекс при превышении 500 КБ считает сайт полностью открытым.
+
+  blocked_resources:
+    severity: high
+    params:
+      agent: Googlebot
+    refs: [https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt#order-of-precedence-for-rules]
+    text:
+      ru:
+        title: CSS, JS или изображения закрыты в robots.txt
+        description: >-
+          Googlebot отрисовывает страницы как браузер. Если стили или скрипты запрещены в robots.txt,
+          он видит страницу сломанной: часть контента и ссылок пропадает, мобильная вёрстка не распознаётся.
+        recommendation: Откройте для сканирования файлы, нужные для отрисовки страниц.
+        message: "Страниц с файлом: $pages ($examples)"
+        fix: |
+          Найдите правило Disallow, под которое попадает файл, и добавьте разрешение для статики.
+          Правило Allow должно быть длиннее запрещающего: при конфликте Google применяет самое длинное совпадение.
+          ```text
+          User-agent: *
+          Disallow: /assets/
+          Allow: /assets/*.css
+          Allow: /assets/*.js
+          ```
+          Проверьте результат в Search Console: «Проверка URL» → «Посмотреть проверенную страницу».
+
+  canonical_target_non_indexable:
+    severity: high
+    params:
+      max_fetches: 100
+    refs: [https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls]
+    text:
+      ru:
+        title: Canonical указывает на неиндексируемую страницу
+        description: >-
+          Страницы передают сигналы на canonical-URL, но он сам закрыт от индексации или ссылается дальше.
+          Поисковик игнорирует такое указание и выбирает основную версию сам.
+        recommendation: Указывайте в canonical конечную индексируемую страницу.
+        message:
+          noindex: "Целевая страница закрыта noindex. Страниц с этим canonical: $pages ($examples)"
+          chain: "Цепочка: canonical целевой страницы ведёт на $final. Страниц с этим canonical: $pages ($examples)"
+          loop: "Петля: canonical целевой страницы ведёт обратно на $final"
+          blocked: "Целевая страница закрыта в robots.txt. Страниц с этим canonical: $pages ($examples)"
+        fix: |
+          - noindex: уберите noindex с целевой страницы или укажите canonical на индексируемую.
+          - Цепочка: укажите сразу конечный URL (A → C, а не A → B → C).
+          - Петля: выберите основную страницу; у неё canonical на саму себя, у дублей — на неё.
+          - robots.txt: откройте целевую страницу для сканирования, иначе робот не увидит её содержимое.
+
+  not_in_sitemap:
+    severity: low
+    text:
+      ru:
+        title: Индексируемые страницы отсутствуют в sitemap
+        description: >-
+          Sitemap — список страниц, которые вы хотите видеть в поиске. Страницы вне карты сайта
+          поисковики находят и переобходят медленнее.
+        recommendation: Добавьте все индексируемые страницы в sitemap.
+        fix: |
+          Генерируйте sitemap автоматически из той же базы, что и сайт (плагин CMS или скрипт по расписанию).
+          В карту попадают все страницы с кодом 200, без noindex и с canonical на себя. Если страница
+          не должна быть в поиске — закройте её noindex или укажите canonical на основную.
+
+  redirect_https_to_http:
+    severity: high
+    text:
+      ru:
+        title: Редирект с HTTPS на HTTP
+        description: >-
+          Перенаправление с защищённой версии на незащищённую: браузер показывает предупреждение,
+          а поисковик получает противоречивые сигналы о главном зеркале сайта.
+        recommendation: Перенаправляйте только на HTTPS-адреса.
+        message: "Перенаправляет на $target"
+        fix: |
+          Найдите правило, которое формирует `http://` в заголовке `Location`: абсолютный URL в настройках CMS,
+          устаревшее правило в .htaccess или приложение за прокси, которое не знает исходный протокол
+          (передавайте и учитывайте `X-Forwarded-Proto`). Проверка: `curl -I https://example.com/page`.
+
+  search_pages_indexable:
+    severity: medium
+    params:
+      params: [q, s, search, query, poisk, keyword, searchword]
+      paths: [search, poisk, find]
+    text:
+      ru:
+        title: Страницы поиска по сайту открыты для индексации
+        description: >-
+          Результаты внутреннего поиска — бесконечное множество похожих малополезных страниц.
+          Google советует не тратить на них краулинговый бюджет, Яндекс относит такие страницы к малоценным.
+        recommendation: Закройте результаты поиска от индексации.
+        fix: |
+          Добавьте в шаблон результатов поиска:
+          ```html
+          <meta name="robots" content="noindex, follow">
+          ```
+          Или запретите сканирование в robots.txt (`Disallow: /search`, `Disallow: /*?q=`) — но не оба способа
+          сразу: закрытую в robots.txt страницу робот не прочитает и не увидит noindex.
+          Не ставьте ссылки на результаты поиска в меню и облаках тегов — ссылайтесь на категории.
+
+  url_variants_duplicate:
+    severity: medium
+    scope: site
+    params:
+      max_samples: 3
+      index_files: [/index.php, /index.html]
+    text:
+      ru:
+        title: Страницы доступны по нескольким адресам
+        description: >-
+          Один и тот же контент открывается по адресу со слэшем и без, в другом регистре или через index.php —
+          без редиректа и canonical. Для поисковиков это разные страницы-дубли, между которыми делится вес.
+        recommendation: Настройте 301-редирект с вариантов адреса на основной URL.
+        message:
+          slash: "Открывается и со слэшем, и без; основной адрес $original, дублей среди проверенных: $count"
+          case: "Открывается в другом регистре; основной адрес $original, дублей среди проверенных: $count"
+          index: "Главная доступна через индексный файл; основной адрес $original"
+        fix: |
+          nginx:
+          ```nginx
+          # единый вид адресов — со слэшем на конце
+          rewrite ^([^.]*[^/])$ $1/ permanent;
+          # /index.php и /index.html → /
+          if ($request_uri ~* "^/index\.(php|html)$") { return 301 /; }
+          ```
+          Приведение к нижнему регистру настраивается в приложении (301 на `path.lower()`).
+          Если редирект невозможен — выведите на всех вариантах `<link rel="canonical">` на основной адрес.
+
+  canonical_invalid:
+    severity: high
+    params:
+      home_pattern_min: 3
+    refs: [https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls]
+    text:
+      ru:
+        title: Некорректный canonical
+        description: >-
+          Canonical, который поисковик не может принять: стоит вне `<head>`, пустой, с якорем, ведёт на
+          HTTP-версию HTTPS-сайта или массово указывает на главную. Такое указание игнорируется или склеивает
+          с главной страницы, которые должны ранжироваться самостоятельно.
+        recommendation: Выведите один абсолютный canonical в `<head>` на конечный HTTPS-адрес страницы.
+        message:
+          outside_head: "Canonical вне <head> — Google его не учитывает: $value"
+          empty: "Пустой или некорректный адрес: $value"
+          fragment: "Адрес с якорем (#): $value"
+          http: "Ведёт на HTTP-версию: $value"
+          homepage: "Canonical на главную у разных страниц. Страниц с таким canonical: $pages ($examples)"
+        fix: |
+          ```html
+          <head>
+            <link rel="canonical" href="https://example.com/section/page/">
+          </head>
+          ```
+          - Тег должен стоять в `<head>`: скрипты и виджеты, которые вставляют его в `<body>`, не подходят.
+          - Адрес — абсолютный, на HTTPS, без `#` и без параметров отслеживания.
+          - Canonical на главную ставят только настоящим дублям главной; у остальных страниц — canonical на себя.
+
+  head_broken:
+    severity: high
+    refs: [https://developers.google.com/search/docs/crawling-indexing/valid-page-metadata]
+    text:
+      ru:
+        title: Невалидный head — мета-теги оказываются в body
+        description: >-
+          В `<head>` стоит элемент, которого там быть не должно. Парсер закрывает `<head>` на нём, и всё,
+          что идёт ниже — canonical, meta robots, hreflang, title, — оказывается в `<body>`. Google такие
+          теги не учитывает.
+        recommendation: Уберите из `<head>` элементы, которые там недопустимы, или перенесите мета-теги выше них.
+        message:
+          default: "<$tag> закрывает <head>; в <body> оказались: $moved"
+          text: "Текст внутри <head> закрывает его; в <body> оказались: $moved"
+          noscript_img: "<noscript> с изображением (часто пиксель счётчика) закрывает <head>; в <body> оказались: $moved"
+        fix: |
+          В `<head>` допустимы только `title`, `meta`, `link`, `base`, `style`, `script`, `noscript`
+          (без изображений внутри) и `template`. Частые причины:
+          - пиксели счётчиков (`<noscript><img ...></noscript>`) — перенесите их в начало `<body>`;
+          - `<div>`, `<iframe>`, `<img>`, вставленные плагином или виджетом;
+          - случайный текст или незакрытый тег в шаблоне шапки.
+          Поставьте SEO-теги (title, description, canonical, robots, hreflang) в самое начало `<head>`.
+
+  robots_directives_conflict:
+    severity: medium
+    text:
+      ru:
+        title: Противоречивые директивы индексации
+        description: >-
+          На странице одновременно указаны противоположные директивы (в meta robots и заголовке
+          X-Robots-Tag) или noindex вместе с canonical на другую страницу. Поисковик выбирает самый
+          строгий вариант, и результат расходится с задуманным.
+        recommendation: Оставьте одну согласованную директиву для страницы.
+        message:
+          contradiction: "Одновременно указаны: $value"
+          noindex_canonical: "noindex и canonical на $target одновременно"
+        fix: |
+          - Проверьте все источники: `<meta name="robots">`, `<meta name="googlebot">` / `yandex`
+            и заголовок `X-Robots-Tag` в ответе сервера — обычно один из них задаёт CMS, другой плагин.
+          - Для дубля оставьте только canonical на основную страницу; для страницы, которой не место
+            в поиске, — только noindex.
+
+  sitemap_limits:
+    severity: high
+    scope: site
+    refs: [https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap]
+    text:
+      ru:
+        title: Sitemap превышает лимиты или содержит чужие адреса
+        description: >-
+          Один файл sitemap может содержать не больше 50 000 URL и весить не больше 50 МБ в распакованном
+          виде; адреса должны быть с того же хоста и протокола, что и сайт. Нарушения приводят к тому,
+          что файл или часть адресов не обрабатываются.
+        recommendation: Разбейте большой sitemap на части и оставьте в нём только адреса сайта на HTTPS.
+        message:
+          too_many_urls: "Адресов в файле: $count (лимит — 50 000)"
+          too_large: "Размер файла: $size_mb МБ (лимит — 50 МБ)"
+          foreign: "Адреса другого домена или поддомена (адресов: $count): $examples"
+          http: "HTTP-адреса на HTTPS-сайте (адресов: $count): $examples"
+        fix: |
+          - Разделите карту на несколько файлов и объедините их через sitemap index:
+            ```xml
+            <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              <sitemap><loc>https://example.com/sitemap-1.xml</loc></sitemap>
+              <sitemap><loc>https://example.com/sitemap-2.xml</loc></sitemap>
+            </sitemapindex>
+            ```
+          - Генерируйте адреса из настройки основного домена с `https://`, а не из текущего запроса.
+          - У каждого поддомена должен быть свой sitemap.

@@ -1,9 +1,11 @@
 category: html
 
 options:
-  validator_url: https://validator.w3.org/nu/   # self-hosted vnu: http://localhost:8888/
-  validator_pages: 5
-  validator_delay: 1.0
+  validator: auto        # auto: local vnu, downloaded to ~/.cache/seoaudit on first run, else online; local | online
+  validator_pages: null  # null: every page locally, 5 online
+  vnu: null              # path to vnu-runtime-image or vnu.jar; default: the cached download
+  validator_url: https://validator.w3.org/nu/   # online mode; a self-hosted vnu server works too
+  validator_delay: 1.0   # online only, between requests
 
 rules:
   doctype_missing:
@@ -69,9 +71,11 @@ rules:
         title: Ошибки валидации HTML (W3C)
         description: >-
           Валидатор W3C нашёл более $max_errors ошибок разметки. Грубые ошибки (незакрытые теги,
-          неверная вложенность) могут исказить то, как робот видит контент страницы.
+          неверная вложенность) могут исказить то, как робот видит контент страницы. Валидатор разбирает
+          страницу без JavaScript, поэтому учитывает и содержимое `<noscript>` — отсюда бывают
+          «Duplicate ID», которых нет в правиле «Повторяющиеся id элементов».
         recommendation: Исправьте ошибки разметки, начиная с незакрытых тегов и неверной вложенности.
-        message: "Ошибок: $count. $examples"
+        message: "Ошибок разметки: $count (список — в отчёте валидатора)"
         fix: |
           Проверьте страницу на https://validator.w3.org/nu/ и исправьте ошибки в шаблонах.
           Приоритет: незакрытые/лишние теги, блочные элементы внутри `<p>` и `<a>`,
