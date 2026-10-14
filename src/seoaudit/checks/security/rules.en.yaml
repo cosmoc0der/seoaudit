@@ -1,0 +1,183 @@
+terms:
+  expired: The certificate has expired
+  not_yet_valid: The certificate is not valid yet
+  wrong_host: The certificate is issued for another domain
+  self_signed: Self-signed certificate
+  missing_chain: The intermediate certificate chain is not installed
+  untrusted: Browsers do not trust the certificate
+
+rules:
+  https_missing:
+    title: The site works without HTTPS
+    description: >-
+      HTTPS is a ranking factor. Browsers mark HTTP sites as "Not secure", which scares visitors away and lowers
+      conversion.
+    recommendation: Install an SSL certificate and move the site to HTTPS.
+    fix: |
+      1. Issue a free Let's Encrypt certificate: `certbot --nginx -d example.com -d www.example.com`.
+      2. Set up a 301 redirect from every http:// address to https://.
+      3. Switch internal links and resource paths to https://.
+      4. Add the https version to Google Search Console and Yandex Webmaster.
+
+  http_redirect:
+    title: The HTTP version does not redirect to HTTPS
+    description: The site is available over http:// without a permanent redirect; it is a duplicate site and a traffic interception risk.
+    recommendation: Set up a 301 redirect from http:// to https://.
+    message:
+      none: "http:// answers $status without redirecting to HTTPS"
+      temporary: "A temporary $status redirect is used instead of 301"
+      chain: "The redirect to HTTPS goes through an intermediate HTTP address"
+    fix: |
+      ```nginx
+      server {
+        listen 80;
+        server_name example.com www.example.com;
+        return 301 https://example.com$request_uri;
+      }
+      ```
+
+  ssl_invalid:
+    title: Invalid SSL certificate
+    description: Browsers show a full-screen warning, and crawlers may not index the site.
+    recommendation: Install a valid certificate with the full chain.
+    message: "$error"
+    fix: |
+      Check the certificate at https://www.ssllabs.com/ssltest/. Typical causes: it has expired, it is issued
+      for another domain (no www), the intermediate chain is not installed (use `fullchain.pem`, not `cert.pem`).
+
+  ssl_expiring:
+    title: The SSL certificate expires soon
+    description: Less than $min_days days are left until the certificate expires.
+    recommendation: Renew the certificate and set up automatic renewal.
+    message: "Days left: $days"
+    fix: |
+      For Let's Encrypt, check the renewal timer: `systemctl list-timers | grep certbot`
+      and a test run `certbot renew --dry-run`. Set up monitoring of the certificate's expiry.
+
+  hsts_missing:
+    title: No HSTS header
+    description: Strict-Transport-Security stops the browser from opening the site over HTTP and protects against downgrade attacks.
+    recommendation: Add the Strict-Transport-Security header.
+    fix: |
+      ```nginx
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      ```
+      Start with a small max-age (for example, 300), make sure every subdomain works over HTTPS,
+      then raise it to a year.
+
+  csp_missing:
+    title: No Content-Security-Policy
+    description: CSP restricts the sources of scripts and styles; it is the main defense against XSS and injected code.
+    recommendation: Set up a Content-Security-Policy.
+    fix: |
+      Start in report-only mode so nothing breaks:
+      ```nginx
+      add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' https://mc.yandex.ru https://www.googletagmanager.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'" always;
+      ```
+      Collect the violations, extend the list of allowed sources and switch to `Content-Security-Policy`.
+
+  content_type_options_missing:
+    title: No X-Content-Type-Options header
+    description: Without it the browser may guess the file type, which opens the door to attacks through uploaded files.
+    recommendation: Add X-Content-Type-Options nosniff.
+    fix: |
+      ```nginx
+      add_header X-Content-Type-Options "nosniff" always;
+      ```
+
+  clickjacking_protection_missing:
+    title: No clickjacking protection
+    description: The site can be embedded in a frame on another site to trick users into clicking.
+    recommendation: Add X-Frame-Options or CSP frame-ancestors.
+    fix: |
+      ```nginx
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      # or the modern option:
+      add_header Content-Security-Policy "frame-ancestors 'self'" always;
+      ```
+
+  referrer_policy_missing:
+    title: No Referrer-Policy header
+    description: Without a policy, the full URL (parameters included) may be passed to third-party sites.
+    recommendation: Add a Referrer-Policy.
+    fix: |
+      ```nginx
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      ```
+
+  permissions_policy_missing:
+    title: No Permissions-Policy header
+    description: Permissions-Policy restricts pages and embedded frames from using the camera, geolocation and other APIs.
+    recommendation: Add a Permissions-Policy if needed.
+    fix: |
+      ```nginx
+      add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+      ```
+
+  server_disclosure:
+    title: The server discloses software versions
+    description: Server and framework versions in the headers make it easier for attackers to find known vulnerabilities.
+    recommendation: Hide software versions in the response headers.
+    message: "$headers"
+    fix: |
+      ```nginx
+      server_tokens off;
+      ```
+      PHP: `expose_php = Off` in php.ini. Express: `app.disable('x-powered-by')`.
+      ASP.NET: `<httpRuntime enableVersionHeader="false" />`.
+
+  cookies_insecure:
+    title: Cookies without security flags
+    description: >-
+      Cookies without Secure can travel over HTTP, without HttpOnly they can be read by scripts (session theft
+      via XSS), without SameSite they are sent from other sites (CSRF; Chrome restricts such cookies by default,
+      Safari and Firefox do not). HttpOnly is required only for cookies that look like session cookies.
+    recommendation: Set the Secure, HttpOnly and SameSite flags.
+    message: "Cookie “$cookie”: missing $issues"
+    fix: |
+      ```http
+      Set-Cookie: session=abc; Path=/; Secure; HttpOnly; SameSite=Lax
+      ```
+      Leave HttpOnly off only for cookies that JavaScript really has to read.
+
+  mixed_content:
+    title: Mixed content (HTTP resources on HTTPS)
+    description: The HTTPS page loads resources over HTTP; the browser blocks them or marks the page as insecure.
+    recommendation: Load every resource over HTTPS.
+    message: "Resources: $count (for example: $examples)"
+    fix: |
+      Replace `http://` with `https://` in resource paths (or use relative paths).
+      A temporary safety net:
+      ```nginx
+      add_header Content-Security-Policy "upgrade-insecure-requests" always;
+      ```
+
+  target_blank_noopener:
+    title: External target="_blank" links without rel="noopener"
+    description: >-
+      The opened page gets access to `window.opener` (tabnabbing). Modern browsers apply noopener by default,
+      older ones do not.
+    recommendation: Add rel="noopener noreferrer" to external links with target="_blank".
+    message: "Links: $count (for example: $examples)"
+    fix: |
+      ```html
+      <a href="https://example.org/" target="_blank" rel="noopener noreferrer">External site</a>
+      ```
+
+  sensitive_files:
+    title: Sensitive files are exposed
+    description: >-
+      Files that may contain source code, database passwords or API keys are reachable from the internet.
+      This is a critical vulnerability.
+    recommendation: Block access to the files immediately and rotate the compromised passwords and keys.
+    message: "Exposed: $path"
+    fix: |
+      1. Block access at the web server level:
+      ```nginx
+      location ~ /\.(?!well-known) { deny all; }
+      location ~* \.(sql|bak|old|swp|env)$ { deny all; }
+      ```
+      2. Remove backups and dumps from the public directory.
+      3. If `.git` or `.env` was exposed, treat every secret as compromised:
+         change database passwords, API keys and tokens.
+      4. Deploy only the build output to the server, without service directories.

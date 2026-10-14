@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from seoaudit.core.config import ReportConfig
+from seoaudit.core.config import DEFAULT_LANG, ReportConfig
 from seoaudit.core.models import AuditReport
 from seoaudit.reporting.data import write_csv, write_json
 from seoaudit.reporting.html import write_html
@@ -39,8 +39,10 @@ def report_basename(report: AuditReport) -> str:
 
 
 def _basename(report: AuditReport, config: ReportConfig) -> str:
-    # Both editions of one audit are often sent together, so they must not overwrite each other.
+    # Editions and translations of one audit are often sent together, so they must not overwrite each other.
     base = report_basename(report)
+    if report.lang != DEFAULT_LANG:
+        base = f"{base}-{report.lang}"
     return base if config.include_recommendations else f"{base}-findings"
 
 

@@ -4,6 +4,10 @@ import httpx
 import pytest
 
 SITE = "http://shop.test"
+# Lighthouse and the browser render would go to the real network.
+OFFLINE = {
+    "checks": {"pagespeed": {"enabled": False}, "rendering": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}
+}
 DESCRIPTION = '<meta name="description" content="Same description on every page of the test shop website.">'
 
 

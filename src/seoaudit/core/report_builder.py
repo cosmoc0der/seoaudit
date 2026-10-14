@@ -18,34 +18,50 @@ from seoaudit.core.scoring import category_score, grade, overall_score
 
 
 def build_rule_result(spec: RuleSpec, sink: FindingSink, lang: str) -> RuleResult:
-    text = spec.localized(lang)
     findings = sink.findings.get(spec.id, [])
     status, note = sink.statuses.get(spec.id, (None, None))
     if findings:
         status = RuleStatus.FAILED
     elif status is None:
         status = RuleStatus.PASSED
-
-    for finding in findings:
-        finding.message = text.format_message(finding.key, {**spec.params, **finding.data})
     if spec.id in sink.truncated:
         note = note or "findings_truncated"
 
-    return RuleResult(
+    result = RuleResult(
         id=spec.id,
         check=spec.check,
         category=spec.category,
         severity=spec.severity,
         scope=spec.scope,
         status=status,
-        title=text.title,
-        description=text.description,
-        recommendation=text.recommendation,
-        fix=text.fix,
+        title=spec.id,
         refs=spec.refs,
         findings=findings,
         note=note,
     )
+    _apply_text(result, spec, lang)
+    return result
+
+
+def _apply_text(result: RuleResult, spec: RuleSpec, lang: str) -> None:
+    text = spec.localized(lang)
+    result.title, result.description, result.recommendation, result.fix = (
+        text.title, text.description, text.recommendation, text.fix
+    )  # fmt: skip
+    for finding in result.findings:
+        finding.message = text.format_message(finding.key, {**spec.params, **finding.data})
+
+
+def localize_report(report: AuditReport, specs: list[RuleSpec], lang: str, extra_categories: dict | None = None) -> None:
+    """Rewrites a saved report's texts in another language; findings keep raw data, so nothing is re-crawled."""
+    by_id = {spec.id: spec for spec in specs}
+    for category in report.categories:
+        meta = get_category(category.id, lang, extra_categories)
+        category.name, category.description = meta.name, meta.description
+        for rule in category.rules:
+            if spec := by_id.get(rule.id):
+                _apply_text(rule, spec, lang)
+    report.lang = lang
 
 
 def build_report(

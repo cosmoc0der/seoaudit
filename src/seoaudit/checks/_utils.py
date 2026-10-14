@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Callable
+from fnmatch import fnmatch
+from urllib.parse import parse_qsl, urlsplit
 
 from seoaudit.core.check import Check
+from seoaudit.core.page import Page
 from seoaudit.core.urls import pretty_url
 
 
@@ -48,5 +52,33 @@ def report_target(check: Check, rule: str, target: str, sources: list[str], max_
     )
 
 
+_PAGINATION_PATH = re.compile(r"/page/\d+/?$")
+_PAGINATION_PARAMS = ("page", "p", "pg", "paged", "pagen_*")
+
+
+def is_paginated(url: str) -> bool:
+    """/category/page/2/ or ?page=2: CMS keep such pages out of sitemaps, and their depth grows with the archive."""
+    parts = urlsplit(url)
+    if _PAGINATION_PATH.search(parts.path):
+        return True
+    keys = [key.lower() for key, _ in parse_qsl(parts.query, keep_blank_values=True)]
+    return bool(keys) and all(any(fnmatch(key, p) for p in _PAGINATION_PARAMS) for key in keys)
+
+
 def truncate(text: str, limit: int = 120) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def changed_signals(before: Page, after: Page) -> list[tuple[str, str, str]]:
+    """Head values search engines go by that differ between two versions of a page, as (name, before, after)."""
+    signals = {
+        "title": lambda p: p.title or "",
+        "description": lambda p: p.meta("description") or "",
+        "canonical": lambda p: pretty_url(p.canonicals[0]) if p.canonicals else "",
+        "robots": lambda p: ", ".join(sorted(p.robots)),
+    }
+    return [
+        (name, truncate(value(before), 80) or "—", truncate(value(after), 80) or "—")
+        for name, value in signals.items()
+        if value(before) != value(after)
+    ]

@@ -118,12 +118,16 @@ rules:
   organization_missing:
     severity: low
     scope: site
+    category: geo
     params:
       types: [Organization, LocalBusiness, Corporation, Store, OnlineStore, Person, NewsMediaOrganization, EducationalOrganization, MedicalOrganization]
+    refs: [https://developers.google.com/search/docs/appearance/structured-data/organization]
     text:
       ru:
         title: На главной нет разметки Organization
-        description: Разметка организации помогает поисковикам связать сайт с брендом, логотипом и контактами (Knowledge Graph).
+        description: >-
+          Разметка организации связывает сайт с брендом, логотипом и контактами в Knowledge Graph Google.
+          По этим же данным AI-ассистенты понимают, о какой компании сайт, и не путают её с тёзками.
         recommendation: Добавьте Organization (или LocalBusiness) и WebSite на главную страницу.
         fix: |
           ```html
@@ -139,6 +143,34 @@ rules:
           }
           </script>
           ```
+
+  organization_same_as:
+    severity: low
+    scope: site
+    category: geo
+    refs:
+      - https://developers.google.com/search/docs/appearance/structured-data/organization
+      - https://schema.org/sameAs
+    text:
+      ru:
+        title: В разметке Organization нет ссылок sameAs
+        description: >-
+          Свойство sameAs перечисляет профили компании на других сайтах: Wikidata, Википедия, LinkedIn,
+          соцсети, каталоги. Поисковики и AI-ассистенты по ним убеждаются, что сайт и упоминания бренда
+          в других источниках относятся к одной компании. Без этого бренд хуже распознаётся как сущность
+          и реже попадает в ответы.
+        recommendation: Добавьте в Organization на главной свойство sameAs со ссылками на официальные профили.
+        fix: |
+          ```json
+          "sameAs": [
+            "https://www.wikidata.org/wiki/Q000000",
+            "https://ru.wikipedia.org/wiki/Компания",
+            "https://www.linkedin.com/company/company",
+            "https://t.me/company"
+          ]
+          ```
+          Указывайте только профили, которыми управляет компания или которые описывают именно её.
+          Если компании нет в Wikidata, создание записи — один из самых сильных сигналов для сущности бренда.
 
   breadcrumbs_missing:
     severity: info
@@ -177,7 +209,9 @@ rules:
           price: "Цена не числом (значений: $count): $examples"
           currency: "Неверный код валюты ISO 4217 (значений: $count): $examples"
           url: "Адрес не распознаётся как URL (значений: $count): $examples"
-          breadcrumb: "Ошибки в элементах хлебных крошек (ошибок: $count): $examples"
+          breadcrumb_name: "В элементах хлебных крошек нет name (элементов: $count): $examples"
+          breadcrumb_item: "В элементах хлебных крошек, кроме последнего, нет item (элементов: $count): $examples"
+          breadcrumb_position: "В элементах хлебных крошек position не число (элементов: $count): $examples"
         fix: |
           - Даты: `2026-03-15` или `2026-03-15T10:00:00+03:00`.
           - Цена: число с точкой, без пробелов и символа валюты — `"price": "1490.00"`; валюта отдельно,

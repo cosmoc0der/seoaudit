@@ -1,0 +1,208 @@
+rules:
+  structured_data_missing:
+    title: The site has no Schema.org markup
+    description: >-
+      Structured data helps search engines understand page content and enables rich results: prices, ratings,
+      breadcrumbs, product and event data, which noticeably raises CTR.
+    recommendation: Add JSON-LD markup for the key page types.
+    fix: |
+      Add JSON-LD to `<head>` or the end of `<body>`. The minimum set: Organization on the home page,
+      BreadcrumbList on inner pages, Product/Article/LocalBusiness by page type.
+      ```html
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Company",
+        "url": "https://example.com",
+        "logo": "https://example.com/logo.png"
+      }
+      </script>
+      ```
+      Check: https://search.google.com/test/rich-results and https://validator.schema.org/
+
+  jsonld_invalid:
+    title: JSON-LD syntax error
+    description: The JSON-LD block contains invalid JSON and is ignored by search engines entirely.
+    recommendation: Fix the JSON syntax in the markup.
+    message: "Error at line $line, column $col"
+    fix: |
+      Common mistakes: a trailing comma after the last element, unescaped quotes and line breaks in values,
+      comments inside JSON. Generate JSON-LD with a serializer, not by concatenating strings:
+      ```php
+      <script type="application/ld+json"><?= json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?></script>
+      ```
+      ```python
+      json.dumps(schema, ensure_ascii=False)
+      ```
+
+  schema_required:
+    title: Incomplete markup — required properties missing
+    description: Without the required properties the rich result is not shown, and Search Console reports an error.
+    recommendation: Add the required properties for the listed types.
+    message: "$type: missing $missing"
+    fix: |
+      Properties separated by a slash are interchangeable: any one of them is enough.
+      Check Google's requirements for the type (link below) and test the page at
+      https://search.google.com/test/rich-results. A Product example:
+      ```json
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "Product name",
+        "image": "https://example.com/images/product.jpg",
+        "offers": {
+          "@type": "Offer",
+          "price": "1990",
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock"
+        }
+      }
+      ```
+
+  organization_missing:
+    title: No Organization markup on the home page
+    description: >-
+      Organization markup links the site to the brand, logo and contacts in Google's Knowledge Graph. AI
+      assistants use the same data to understand which company the site belongs to and not confuse it with
+      namesakes.
+    recommendation: Add Organization (or LocalBusiness) and WebSite to the home page.
+    fix: |
+      ```html
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Company",
+        "url": "https://example.com",
+        "logo": "https://example.com/logo.png",
+        "contactPoint": {"@type": "ContactPoint", "telephone": "+1-000-000-0000", "contactType": "customer service"},
+        "sameAs": ["https://www.linkedin.com/company/company", "https://x.com/company"]
+      }
+      </script>
+      ```
+
+  organization_same_as:
+    title: Organization markup has no sameAs links
+    description: >-
+      The sameAs property lists the company's profiles on other sites: Wikidata, Wikipedia, LinkedIn, social
+      networks, directories. Search engines and AI assistants use them to confirm that the site and the brand's
+      mentions elsewhere refer to the same company. Without it the brand is recognized less reliably as an
+      entity and appears in answers less often.
+    recommendation: Add a sameAs property with links to the official profiles to the home page Organization.
+    fix: |
+      ```json
+      "sameAs": [
+        "https://www.wikidata.org/wiki/Q000000",
+        "https://en.wikipedia.org/wiki/Company",
+        "https://www.linkedin.com/company/company",
+        "https://x.com/company"
+      ]
+      ```
+      List only profiles the company controls or that describe exactly this company.
+      If the company is not in Wikidata, creating an entry is one of the strongest brand entity signals.
+
+  breadcrumbs_missing:
+    title: No breadcrumb markup
+    description: >-
+      BreadcrumbList helps search engines understand the site structure; in Google desktop results and in
+      Yandex it shows the section path instead of the URL.
+    recommendation: Add BreadcrumbList markup to inner pages.
+    fix: |
+      ```json
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {"@type": "ListItem", "position": 1, "name": "Section", "item": "https://example.com/section/"},
+          {"@type": "ListItem", "position": 2, "name": "Page name", "item": "https://example.com/section/page/"}
+        ]
+      }
+      ```
+
+  schema_values:
+    title: Invalid value formats in markup
+    description: >-
+      The property is filled in, but in a format Google does not accept: a date not in ISO 8601, a price with
+      spaces or a currency sign, a wrong currency code, an address without a protocol. The rich result for such
+      an item is not shown, and Search Console reports an error.
+    recommendation: Bring the values to the formats Google requires.
+    message:
+      date: "Date not in ISO 8601 format ($count values): $examples"
+      price: "Price is not a number ($count values): $examples"
+      currency: "Invalid ISO 4217 currency code ($count values): $examples"
+      url: "Address is not recognized as a URL ($count values): $examples"
+      breadcrumb_name: "Breadcrumb items without name ($count items): $examples"
+      breadcrumb_item: "Breadcrumb items other than the last without item ($count items): $examples"
+      breadcrumb_position: "Breadcrumb items whose position is not a number ($count items): $examples"
+    fix: |
+      - Dates: `2026-03-15` or `2026-03-15T10:00:00+03:00`.
+      - Price: a number with a dot, without spaces or a currency sign: `"price": "1490.00"`; the currency goes
+        separately as an ISO 4217 code: `"priceCurrency": "USD"` (not `$`).
+      - Give addresses (`url`, `image`, `logo`) in full, with the protocol: `https://example.com/images/photo.jpg`,
+        not `www.example.com/images/photo.jpg`; without a protocol it is a relative path to a page that does not exist.
+      - Every breadcrumb item: `position` (1, 2, 3…), `name` and `item` (the last one may omit `item`).
+      Check the result at https://search.google.com/test/rich-results.
+
+  schema_vocabulary:
+    title: Markup does not match the Schema.org vocabulary
+    description: >-
+      The markup has types or properties that do not exist in Schema.org, values of the wrong type or invalid
+      enumeration values. Search engines skip such items: a typo in a type disables the whole object, a typo in
+      a property disables the property. These are the same errors the Schema.org validator
+      (validator.schema.org) reports.
+    recommendation: Fix the types, properties and values according to the Schema.org vocabulary.
+    message:
+      missing: "No @context, search engines do not recognize the markup as Schema.org ($count objects): $examples"
+      obsolete: "data-vocabulary.org vocabulary, unsupported by Google since 2021 ($count objects): $examples"
+      type: "Types that do not exist in Schema.org ($count types): $examples. After the arrow is the likely intended one"
+      property: "Properties this type does not have ($count properties): $examples. After the arrow is the likely intended one"
+      range: "Value of the wrong type ($count values): $examples. In parentheses are the types Schema.org allows"
+      enum: "Invalid value ($count values): $examples. In parentheses are the allowed values"
+    fix: |
+      - Put `"@context": "https://schema.org"` in every JSON-LD block; replace data-vocabulary.org markup
+        with Schema.org.
+      - Type and property names are case-sensitive: `Product`, `PostalAddress`, `priceCurrency`.
+        A property must belong to the type or its parent: `Organization` has no `price`, `Offer` has no `brand`.
+      - A nested object must be of the type the property expects: `author` is `Person` or `Organization`,
+        `address` is `PostalAddress`, `offers` is `Offer` or `AggregateOffer`.
+      - Enumerations take only vocabulary values:
+      ```json
+      "availability": "https://schema.org/InStock",
+      "itemCondition": "https://schema.org/NewCondition",
+      "eventStatus": "https://schema.org/EventScheduled"
+      ```
+      Check the page at https://validator.schema.org/; after the fix it should show no errors.
+
+  schema_recommended:
+    title: Markup lacks recommended properties
+    description: >-
+      The markup works, but without the properties Google recommends for this type: the snippet will be poorer
+      (no date, price, availability, rating), and Search Console and the Rich Results Test will show warnings.
+    recommendation: Add the recommended properties if the page has the data for them.
+    message: "$type: missing $missing"
+    fix: |
+      Fill in only what is actually visible on the page: Google removes rich results for markup data that is
+      not in the content. An article example:
+      ```json
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Article title",
+        "image": "https://example.com/images/cover.jpg",
+        "datePublished": "2026-03-15T10:00:00+03:00",
+        "dateModified": "2026-04-02T09:00:00+03:00",
+        "author": {"@type": "Person", "name": "Author Name", "url": "https://example.com/authors/name/"}
+      }
+      ```
+      Check the page at https://search.google.com/test/rich-results; the warnings section lists the missing
+      properties.
+
+  rich_result_retired:
+    title: Markup for rich results Google no longer shows
+    description: >-
+      Google has switched off some rich results: HowTo (2023), the sitelinks search box — SearchAction (2024),
+      SpecialAnnouncement, ClaimReview and salary estimates — Occupation (2025), FAQ (May 2026). The markup does
+      no harm and other services may use it, but it no longer earns an extra snippet in Google.
+    recommendation: Do not invest in this markup for Google's sake; removing it is optional.
+    message: "$type ($pages pages)"

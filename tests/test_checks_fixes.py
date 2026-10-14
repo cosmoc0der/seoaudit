@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from conftest import html
+from conftest import OFFLINE, html
 from seoaudit.checks.html import _is_plugin
 from seoaudit.checks.meta import _max_scale
 from seoaudit.checks.pagespeed import PageSpeedCheck
@@ -18,7 +18,6 @@ from seoaudit.core.models import AuditReport, RuleStatus
 from seoaudit.core.rules import build_rules, load_definition
 
 SITE = "http://fix.test"
-OFFLINE = {"checks": {"pagespeed": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}}
 HTML = {"content-type": "text/html; charset=utf-8"}
 TEXT = "Достаточно длинный текст страницы для проверок. " * 60
 
@@ -137,11 +136,9 @@ def test_csrf_cookie_needs_no_httponly():
     assert _cookie_issues("sessionid=1; Secure; SameSite=Lax", True) == ("sessionid", ["HttpOnly"])
 
 
-def test_tls_error_is_translated():
-    assert _tls_error("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired") == (
-        "Срок действия сертификата истёк"
-    )
-    assert _tls_error("something odd") == "Браузеры не доверяют сертификату"
+def test_tls_error_is_classified():
+    assert _tls_error("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: certificate has expired") == "expired"
+    assert _tls_error("something odd") == "untrusted"
 
 
 def test_plugin_markers_are_exact():
@@ -186,10 +183,10 @@ def test_field_data_origin_fallback_is_reported_once(monkeypatch, transport):
         return Runner()
 
     monkeypatch.setattr(PageSpeedCheck, "_runner", runner)
-    cfg = AuditConfig.model_validate({"checks": {"html": {"options": {"validator_pages": 0}}}})
+    cfg = AuditConfig.model_validate({"checks": {"rendering": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}})
     report = Auditor(cfg, transport=transport).run_sync("http://shop.test")
     rule = next(r for r in report.rules() if r.id == "pagespeed.field_cwv")
     assert rule.status == RuleStatus.FAILED
     assert [f.message for f in rule.findings] == [
-        "Смартфон: LCP: плохо (данные по сайту целиком: у отдельных страниц мало посещений)"
+        "Смартфон: LCP — плохо (данные по сайту целиком: у отдельных страниц мало посещений)"
     ]

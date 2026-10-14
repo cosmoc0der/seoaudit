@@ -31,6 +31,8 @@ class SitemapFile:
     # Before normalization and the audit's URL cap: what the 50,000-URL / 50 MB protocol limits apply to.
     loc_count: int = 0
     size: int | None = None
+    # <lastmod> of each <url> entry of an XML urlset, None where absent; feeds and text sitemaps have none.
+    lastmods: list[str | None] = field(default_factory=list)
 
 
 @dataclass
@@ -150,7 +152,7 @@ async def _load_sitemaps(
         try:
             data = _maybe_gunzip(response.body or b"")
             sitemap.size = response.size if response.truncated else len(data)
-            sitemap.is_index, locs = _parse_sitemap(data)
+            sitemap.is_index, locs, sitemap.lastmods = _parse_sitemap(data)
         except Exception as exc:
             sitemap.error_kind, sitemap.error = "parse", str(exc)
             continue
@@ -166,17 +168,17 @@ async def _load_sitemaps(
     return result, truncated or any(u not in seen for u in queue)
 
 
-def _parse_sitemap(data: bytes) -> tuple[bool, list[str]]:
-    """Returns (is_index, locs) for XML sitemaps, RSS 2.0, Atom and plain-text sitemaps."""
+def _parse_sitemap(data: bytes) -> tuple[bool, list[str], list[str | None]]:
+    """Returns (is_index, locs, lastmods) for XML sitemaps, RSS 2.0, Atom and plain-text sitemaps."""
     data = data.removeprefix(codecs.BOM_UTF8)
     if not data.lstrip().startswith(b"<"):
-        return False, [line.strip() for line in data.decode("utf-8", "replace").splitlines() if line.strip()]
+        return False, [line.strip() for line in data.decode("utf-8", "replace").splitlines() if line.strip()], []
 
     root = ElementTree.fromstring(data)
     kind = _local(root.tag)
     if kind == "rss":
         items = (item for item in root.iter() if _local(item.tag) == "item")
-        return False, [(link.text or "").strip() for item in items for link in item if _local(link.tag) == "link"]
+        return False, [(link.text or "").strip() for item in items for link in item if _local(link.tag) == "link"], []
     if kind == "feed":
         entries = (entry for entry in root if _local(entry.tag) == "entry")
         return False, [
@@ -184,10 +186,13 @@ def _parse_sitemap(data: bytes) -> tuple[bool, list[str]]:
             for entry in entries
             for link in entry
             if _local(link.tag) == "link" and link.get("rel", "alternate") == "alternate"
-        ]
+        ], []
     # Only direct children: <image:loc> and <video:loc> inside <url> point at media, not pages.
     locs = [(loc.text or "").strip() for entry in root for loc in entry if _local(loc.tag) == "loc"]
-    return kind == "sitemapindex", locs
+    if kind == "sitemapindex":
+        return True, locs, []
+    lastmods = [next(((c.text or "").strip() for c in entry if _local(c.tag) == "lastmod"), None) for entry in root]
+    return False, locs, lastmods
 
 
 def _local(tag: object) -> str:

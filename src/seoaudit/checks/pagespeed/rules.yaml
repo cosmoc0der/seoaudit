@@ -12,6 +12,13 @@ options:
   chrome_path: null      # default: env CHROME_PATH, then Playwright's Chromium, then system Chrome
   chrome_flags: ""       # extra flags, e.g. --no-sandbox when running as root in Docker
 
+terms:
+  ru:
+    mobile: Смартфон
+    desktop: Компьютер
+    AVERAGE: требует улучшения
+    SLOW: плохо
+
 rules:
   performance_score:
     severity: medium
@@ -28,8 +35,8 @@ rules:
           использует данные реальных посетителей (Core Web Vitals), но низкая оценка обычно предвещает плохие показатели.
         recommendation: Выполните рекомендации Lighthouse, начиная с тех, что дают наибольшую экономию времени.
         message:
-          default: "$device: $score/100. Главные резервы: $opportunities"
-          bare: "$device: $score/100"
+          default: "$strategy: $score/100. Главные резервы: $opportunities"
+          bare: "$strategy: $score/100"
         fix: |
           Запустите отчёт на https://pagespeed.web.dev/ для страницы из списка и пройдите по разделу
           «Возможности» сверху вниз. Типовые решения:
@@ -52,7 +59,7 @@ rules:
           Largest Contentful Paint в лабораторном замере больше $max_ms мс — пользователь долго ждёт
           появления главного контента.
         recommendation: Ускорьте загрузку LCP-элемента до $max_ms мс.
-        message: "$device: LCP $value мс"
+        message: "$strategy: LCP $value мс"
         fix: |
           ```html
           <!-- Главное изображение первого экрана -->
@@ -74,7 +81,7 @@ rules:
         title: Сдвиги макета при загрузке (CLS)
         description: Cumulative Layout Shift больше $max_value — элементы страницы «прыгают» при загрузке.
         recommendation: Зарезервируйте место под изображения, баннеры, шрифты и динамические блоки.
-        message: "$device: CLS $value"
+        message: "$strategy: CLS $value"
         fix: |
           - Задавайте `width`/`height` или `aspect-ratio` изображениям, видео и iframe.
           - Резервируйте место под рекламу и баннеры (`min-height`).
@@ -92,7 +99,7 @@ rules:
         title: Долгая блокировка основного потока (TBT)
         description: Total Blocking Time больше $max_ms мс — тяжёлый JavaScript мешает странице реагировать на действия (влияет на INP).
         recommendation: Сократите объём и время выполнения JavaScript.
-        message: "$device: TBT $value мс"
+        message: "$strategy: TBT $value мс"
         fix: |
           - Разделите бандл (code splitting), грузите код по маршрутам.
           - Отложите сторонние скрипты (чаты, счётчики, виджеты) до взаимодействия или `requestIdleCallback`.
@@ -111,8 +118,8 @@ rules:
           «хорошему» уровню. Именно эти данные Google использует в ранжировании.
         recommendation: Улучшите метрики, которые требуют улучшения или в плохой зоне.
         message:
-          default: "$device: $metrics"
-          origin: "$device: $metrics (данные по сайту целиком: у отдельных страниц мало посещений)"
+          default: "$strategy: $metric — $rating"
+          origin: "$strategy: $metric — $rating (данные по сайту целиком: у отдельных страниц мало посещений)"
         fix: |
           Ориентиры «хорошего» уровня (75-й перцентиль): LCP ≤ 2,5 с, INP ≤ 200 мс, CLS ≤ 0,1.
           Отслеживайте динамику в Google Search Console → «Основные интернет-показатели».
@@ -122,12 +129,176 @@ rules:
     severity: medium
     scope: site
     category: indexability
+    params:
+      ignore: []
     text:
       ru:
         title: Проблемы, найденные Lighthouse SEO
         description: Lighthouse обнаружил базовые SEO-проблемы при рендеринге страницы в браузере.
         recommendation: Исправьте перечисленные проблемы.
-        message: "$device: $audits"
+        message: "$strategy: $audits"
         fix: |
           Откройте отчёт на https://pagespeed.web.dev/ → раздел «Поисковая оптимизация» —
           для каждого пункта есть ссылка на документацию с инструкцией.
+
+  a11y_names:
+    severity: medium
+    scope: site
+    category: accessibility
+    params:
+      audits: [button-name, link-name, input-button-name, input-image-alt, label, select-name, form-field-multiple-labels,
+               frame-title, object-alt, summary-name, video-caption, label-content-name-mismatch]
+    refs: [https://developer.chrome.com/docs/lighthouse/accessibility/scoring]
+    text:
+      ru:
+        title: Кнопки, ссылки и поля формы без названия
+        description: >-
+          У элементов управления нет текста, который могут прочитать программы экранного доступа.
+          Для поисковиков и AI-ассистентов ссылка-иконка без названия тоже пустая: анкор не передаёт смысл страницы,
+          на которую ведёт.
+        recommendation: Дайте каждой кнопке, ссылке и полю видимый текст или `aria-label`.
+        message: "$strategy: $audits"
+        fix: |
+          ```html
+          <!-- Кнопка-иконка -->
+          <button aria-label="Открыть меню"><svg aria-hidden="true">…</svg></button>
+          <!-- Ссылка-картинка: название берётся из alt -->
+          <a href="/cart"><img src="/cart.svg" alt="Корзина"></a>
+          <!-- Поле формы -->
+          <label for="email">Email</label> <input id="email" type="email">
+          ```
+          Число в скобках — сколько элементов на странице не прошли проверку. Список элементов есть в отчёте
+          на https://pagespeed.web.dev/ → «Специальные возможности».
+
+  a11y_contrast:
+    severity: low
+    scope: site
+    category: accessibility
+    params:
+      audits: [color-contrast, link-in-text-block]
+    refs: [https://web.dev/articles/color-and-contrast-accessibility]
+    text:
+      ru:
+        title: Недостаточный контраст текста
+        description: >-
+          Текст плохо читается на фоне: светло-серый на белом, белый на ярком баннере. Это мешает людям со слабым
+          зрением и всем, кто читает с телефона на солнце.
+        recommendation: Доведите контраст текста до 4,5:1 (крупного — до 3:1).
+        message: "$strategy: $audits"
+        fix: |
+          - Подберите цвета в DevTools: «Инспектор» → цвет текста → блок «Contrast ratio» показывает
+            соотношение и предлагает ближайший подходящий оттенок.
+          - Обычный текст — от 4,5:1, крупный (от 24 px или от 19 px жирным) — от 3:1.
+          - Ссылки внутри абзаца отличайте не только цветом: подчёркивание или контраст с текстом от 3:1.
+
+  a11y_aria:
+    severity: low
+    scope: site
+    category: accessibility
+    params:
+      audits: [aria-allowed-attr, aria-allowed-role, aria-command-name, aria-conditional-attr, aria-deprecated-role,
+               aria-dialog-name, aria-hidden-body, aria-hidden-focus, aria-input-field-name, aria-meter-name,
+               aria-progressbar-name, aria-prohibited-attr, aria-required-attr, aria-required-children,
+               aria-required-parent, aria-roles, aria-text, aria-toggle-field-name, aria-tooltip-name,
+               aria-treeitem-name, aria-valid-attr, aria-valid-attr-value, duplicate-id-aria]
+    refs: [https://developer.mozilla.org/docs/Web/Accessibility/ARIA]
+    text:
+      ru:
+        title: Ошибки в ARIA-атрибутах
+        description: >-
+          Атрибуты `role` и `aria-*` заданы с ошибками: несуществующая роль, недопустимый атрибут, скрытый
+          от экранного доступа элемент, на который можно перейти с клавиатуры. Неверная ARIA хуже, чем никакая.
+        recommendation: Исправьте или уберите перечисленные ARIA-атрибуты.
+        message: "$strategy: $audits"
+        fix: |
+          - Предпочитайте нативные элементы: `<button>` вместо `<div role="button">`, `<nav>` вместо `role="navigation"`.
+          - `aria-hidden="true"` не ставьте на элементы со ссылками и кнопками внутри.
+          - Значения `aria-*` и `role` сверяйте со спецификацией: https://www.w3.org/TR/wai-aria/
+
+  a11y_structure:
+    severity: low
+    scope: site
+    category: accessibility
+    params:
+      audits: [heading-order, empty-heading, list, listitem, definition-list, dlitem, bypass, skip-link,
+               landmark-one-main, tabindex, accesskeys, td-has-header, td-headers-attr, th-has-data-cells,
+               table-duplicate-name, table-fake-caption, html-lang-valid, html-xml-lang-mismatch, valid-lang]
+    refs: [https://developer.chrome.com/docs/lighthouse/accessibility/scoring]
+    text:
+      ru:
+        title: Нарушена структура документа
+        description: >-
+          Заголовки идут не по порядку, списки и таблицы свёрстаны без нужных тегов, порядок перехода
+          с клавиатуры изменён через `tabindex`. Структура важна и для экранного доступа, и для роботов:
+          по ней они понимают, где на странице главное.
+        recommendation: Исправьте разметку перечисленных элементов.
+        message: "$strategy: $audits"
+        fix: |
+          - Заголовки — по уровням без пропусков: `h1` → `h2` → `h3`.
+          - Элементы списков только внутри `<ul>`/`<ol>`, у таблиц — `<th>` для заголовков столбцов.
+          - Не используйте `tabindex` больше 0: он ломает естественный порядок перехода.
+          - Значение `lang` — корректный код языка (`ru`, `en-US`).
+
+  tap_targets:
+    severity: medium
+    scope: site
+    category: mobile
+    params:
+      audits: [target-size]
+    refs: [https://web.dev/articles/accessible-tap-targets]
+    text:
+      ru:
+        title: Слишком маленькие или тесные элементы для нажатия
+        description: Кнопки и ссылки меньше 24×24 px или стоят вплотную друг к другу — на телефоне легко промахнуться.
+        recommendation: Увеличьте область нажатия или отступы между элементами.
+        message: "$strategy: $audits"
+        fix: |
+          ```css
+          .menu a { display: inline-block; min-width: 48px; min-height: 48px; padding: 12px; }
+          ```
+          Область нажатия можно увеличить через `padding`, не меняя размер иконки.
+          Рекомендуемый размер — 48×48 px, минимальный — 24×24 px с отступами.
+
+  a11y_other:
+    severity: low
+    scope: site
+    category: accessibility
+    params:
+      # Covered by images.alt_missing, meta.lang_missing, meta.title_missing, meta.viewport_invalid, meta.meta_refresh.
+      ignore: [image-alt, html-has-lang, document-title, meta-viewport, meta-refresh]
+    refs: [https://developer.chrome.com/docs/lighthouse/accessibility/scoring]
+    text:
+      ru:
+        title: Другие проблемы доступности
+        description: Lighthouse нашёл проблемы доступности, не вошедшие в группы выше.
+        recommendation: Исправьте перечисленные проблемы.
+        message: "$strategy: $audits"
+        fix: |
+          Откройте отчёт на https://pagespeed.web.dev/ → «Специальные возможности»: для каждого пункта
+          есть список элементов и ссылка на инструкцию.
+
+  lighthouse_best_practices:
+    severity: low
+    scope: site
+    category: html
+    params:
+      # Covered by the security, html and meta modules.
+      ignore: [is-on-https, redirects-http, csp-xss, has-hsts, clickjacking-mitigation, origin-isolation, trusted-types-xss,
+               doctype, charset, viewport]
+    refs: [https://developer.chrome.com/docs/lighthouse/best-practices]
+    text:
+      ru:
+        title: Нарушения рекомендаций Lighthouse Best Practices
+        description: >-
+          Ошибки JavaScript в консоли, устаревшие API браузера, сторонние cookie, искажённые или размытые
+          изображения. Ошибки в консоли часто означают, что часть страницы не отрисовалась — и у посетителя,
+          и у Googlebot.
+        recommendation: Исправьте перечисленные проблемы.
+        message: "$strategy: $audits"
+        fix: |
+          - Ошибки в консоли: DevTools → Console на странице из списка; начните с ошибок загрузки
+            ресурсов (404) и необработанных исключений.
+          - Устаревшие API и сторонние cookie: DevTools → Issues — там указаны файл и строка.
+          - Пропорции и разрешение изображений: задайте `width`/`height` в исходной пропорции
+            и отдавайте картинки через `srcset` под плотность экрана.
+          Подробности по каждому пункту: https://pagespeed.web.dev/ → «Рекомендации».

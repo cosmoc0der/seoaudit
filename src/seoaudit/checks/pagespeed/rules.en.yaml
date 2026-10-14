@@ -1,0 +1,180 @@
+terms:
+  mobile: Mobile
+  desktop: Desktop
+  AVERAGE: needs improvement
+  SLOW: poor
+
+rules:
+  performance_score:
+    title: Low Lighthouse performance score
+    description: >-
+      The performance score is below $min_score/100. Lighthouse measures rendering speed, interactivity and
+      layout stability in lab conditions; Google ranks by real-user data (Core Web Vitals), but a low score
+      usually predicts poor field metrics.
+    recommendation: Apply Lighthouse's recommendations, starting with those that save the most time.
+    message:
+      default: "$strategy: $score/100. Biggest opportunities: $opportunities"
+      bare: "$strategy: $score/100"
+    fix: |
+      Run the report at https://pagespeed.web.dev/ for a page from the list and work through the
+      "Opportunities" section from the top. Typical fixes:
+      - compress images, convert them to WebP/AVIF and set their dimensions;
+      - defer unused JS (`defer`, code splitting, removing unneeded libraries);
+      - inline critical CSS and load the rest asynchronously;
+      - load fonts with `font-display: swap` and `preload`;
+      - enable caching and a CDN.
+
+  lcp_slow:
+    title: Slow main content rendering (LCP)
+    description: >-
+      Largest Contentful Paint in the lab measurement exceeds $max_ms ms; the user waits a long time for the
+      main content to appear.
+    recommendation: Bring the LCP element's load time under $max_ms ms.
+    message: "$strategy: LCP $value ms"
+    fix: |
+      ```html
+      <!-- The main image of the first screen -->
+      <link rel="preload" as="image" href="/hero.webp" fetchpriority="high">
+      <img src="/hero.webp" fetchpriority="high" width="1200" height="600" alt="...">
+      ```
+      - Do not use `loading="lazy"` on the LCP image.
+      - Reduce TTFB (caching, CDN).
+      - Remove render-blocking CSS/JS from `<head>`.
+
+  cls_high:
+    title: Layout shifts during loading (CLS)
+    description: Cumulative Layout Shift exceeds $max_value; page elements jump around while loading.
+    recommendation: Reserve space for images, banners, fonts and dynamic blocks.
+    message: "$strategy: CLS $value"
+    fix: |
+      - Set `width`/`height` or `aspect-ratio` on images, videos and iframes.
+      - Reserve space for ads and banners (`min-height`).
+      - Do not insert content above existing content (cookie banners: `position: fixed`).
+      - Fonts: `font-display: optional` or `size-adjust` for the fallback font.
+
+  tbt_high:
+    title: Long main-thread blocking (TBT)
+    description: Total Blocking Time exceeds $max_ms ms; heavy JavaScript keeps the page from responding to input (affects INP).
+    recommendation: Reduce the amount and execution time of JavaScript.
+    message: "$strategy: TBT $value ms"
+    fix: |
+      - Split the bundle (code splitting) and load code per route.
+      - Defer third-party scripts (chats, analytics, widgets) until interaction or `requestIdleCallback`.
+      - Break up long tasks (> 50 ms) with `scheduler.yield()` / `setTimeout`.
+      - Remove unused polyfills and libraries.
+
+  field_cwv:
+    title: Real-user Core Web Vitals are not good
+    description: >-
+      According to the Chrome UX Report (real visitors over 28 days), the metrics do not meet the "good" level.
+      This is the data Google uses for ranking.
+    recommendation: Improve the metrics that need improvement or are in the poor zone.
+    message:
+      default: "$strategy: $metric — $rating"
+      origin: "$strategy: $metric — $rating (data for the whole site: individual pages have too few visits)"
+    fix: |
+      "Good" thresholds (75th percentile): LCP ≤ 2.5 s, INP ≤ 200 ms, CLS ≤ 0.1.
+      Track the trend in Google Search Console → Core Web Vitals.
+      Changes in field data show up with a delay of up to 28 days.
+
+  lighthouse_seo:
+    title: Issues found by Lighthouse SEO
+    description: Lighthouse found basic SEO issues while rendering the page in a browser.
+    recommendation: Fix the listed issues.
+    message: "$strategy: $audits"
+    fix: |
+      Open the report at https://pagespeed.web.dev/ → SEO section; every item links to documentation
+      with instructions.
+
+  a11y_names:
+    title: Buttons, links and form fields without a name
+    description: >-
+      Controls have no text that screen readers can read. For search engines and AI assistants an icon link
+      without a name is empty too: the anchor conveys nothing about the page it leads to.
+    recommendation: Give every button, link and field visible text or an `aria-label`.
+    message: "$strategy: $audits"
+    fix: |
+      ```html
+      <!-- Icon button -->
+      <button aria-label="Open menu"><svg aria-hidden="true">…</svg></button>
+      <!-- Image link: the name comes from alt -->
+      <a href="/cart"><img src="/cart.svg" alt="Cart"></a>
+      <!-- Form field -->
+      <label for="email">Email</label> <input id="email" type="email">
+      ```
+      The number in parentheses is how many elements on the page failed the check. The list of elements is
+      in the report at https://pagespeed.web.dev/ → Accessibility.
+
+  a11y_contrast:
+    title: Insufficient text contrast
+    description: >-
+      Text is hard to read against its background: light gray on white, white on a bright banner. This hinders
+      people with low vision and anyone reading a phone in the sun.
+    recommendation: Bring text contrast up to 4.5:1 (3:1 for large text).
+    message: "$strategy: $audits"
+    fix: |
+      - Pick colors in DevTools: Inspector → text color → the "Contrast ratio" block shows the ratio and
+        suggests the nearest passing shade.
+      - Normal text needs 4.5:1, large text (24 px and up, or 19 px bold) needs 3:1.
+      - Distinguish links inside a paragraph by more than color: an underline or 3:1 contrast with the text.
+
+  a11y_aria:
+    title: Errors in ARIA attributes
+    description: >-
+      `role` and `aria-*` attributes are set incorrectly: a non-existent role, a disallowed attribute, an
+      element hidden from screen readers that can still be reached by keyboard. Wrong ARIA is worse than none.
+    recommendation: Fix or remove the listed ARIA attributes.
+    message: "$strategy: $audits"
+    fix: |
+      - Prefer native elements: `<button>` instead of `<div role="button">`, `<nav>` instead of `role="navigation"`.
+      - Do not put `aria-hidden="true"` on elements containing links and buttons.
+      - Check `aria-*` and `role` values against the specification: https://www.w3.org/TR/wai-aria/
+
+  a11y_structure:
+    title: Broken document structure
+    description: >-
+      Headings are out of order, lists and tables lack the right tags, keyboard navigation order is changed with
+      `tabindex`. Structure matters to screen readers and crawlers alike: it tells them where the main content is.
+    recommendation: Fix the markup of the listed elements.
+    message: "$strategy: $audits"
+    fix: |
+      - Headings follow levels without gaps: `h1` → `h2` → `h3`.
+      - List items only inside `<ul>`/`<ol>`; tables use `<th>` for column headers.
+      - Do not use `tabindex` above 0: it breaks the natural navigation order.
+      - The `lang` value is a valid language code (`ru`, `en-US`).
+
+  tap_targets:
+    title: Tap targets too small or too close
+    description: Buttons and links smaller than 24×24 px or packed tightly together are easy to miss on a phone.
+    recommendation: Enlarge the tap area or the spacing between elements.
+    message: "$strategy: $audits"
+    fix: |
+      ```css
+      .menu a { display: inline-block; min-width: 48px; min-height: 48px; padding: 12px; }
+      ```
+      The tap area can be enlarged with `padding` without changing the icon size.
+      The recommended size is 48×48 px; the minimum is 24×24 px with spacing.
+
+  a11y_other:
+    title: Other accessibility issues
+    description: Lighthouse found accessibility issues outside the groups above.
+    recommendation: Fix the listed issues.
+    message: "$strategy: $audits"
+    fix: |
+      Open the report at https://pagespeed.web.dev/ → Accessibility: every item lists the elements and links
+      to instructions.
+
+  lighthouse_best_practices:
+    title: Lighthouse Best Practices violations
+    description: >-
+      JavaScript errors in the console, deprecated browser APIs, third-party cookies, distorted or blurry
+      images. Console errors often mean part of the page did not render, for visitors and Googlebot alike.
+    recommendation: Fix the listed issues.
+    message: "$strategy: $audits"
+    fix: |
+      - Console errors: DevTools → Console on a page from the list; start with resource load errors (404)
+        and unhandled exceptions.
+      - Deprecated APIs and third-party cookies: DevTools → Issues shows the file and line.
+      - Image aspect ratio and resolution: set `width`/`height` in the original proportion
+        and serve images via `srcset` for the screen density.
+      Details for each item: https://pagespeed.web.dev/ → Best Practices.

@@ -1,0 +1,184 @@
+rules:
+  broken_internal:
+    title: Broken internal links
+    description: >-
+      Links lead to pages that do not exist (4xx) or fail with a server error (5xx). This hurts the user
+      experience and wastes crawl budget.
+    recommendation: Fix or remove links to unavailable pages.
+    message: "Response: $status. Pages with the link: $pages ($examples)"
+    fix: |
+      1. Fix the link URL in the template or content if it has a typo.
+      2. If the page is gone for good, set up a 301 redirect to a relevant replacement
+         and update the links to the new address.
+      3. 5xx errors: check the application logs; this is a backend problem, not a link problem.
+
+  internal_redirect:
+    title: Internal links to redirects
+    description: Links lead to URLs that redirect, an extra request for both users and crawlers.
+    recommendation: Replace the links with the final addresses.
+    message: "$status → $final. Pages with the link: $pages ($examples)"
+    fix: |
+      Update links in menus, templates and content to the final URL.
+      A common cause is links without a trailing slash or to `http://` when HTTPS is in use.
+
+  broken_external:
+    title: Broken external links
+    description: Links to dead external resources hurt the user experience and make the content look outdated.
+    recommendation: Update or remove the broken external links.
+    message: "Response: $status. Pages with the link: $pages ($examples)"
+    fix: |
+      Replace the link with the resource's current address or an archived copy (web.archive.org), or remove it.
+      Codes 401/403/429 are not counted as errors: many sites block automated checks.
+
+  external_unreachable:
+    title: External sites did not respond
+    description: >-
+      The site did not respond to the check (timeout or connection error). This may be a dead domain, a
+      regional block or bot protection, so it does not affect the score.
+    recommendation: Open the links by hand and remove those that do not work for users either.
+    message: "The site did not respond. Pages with the link: $pages ($examples)"
+    fix: |
+      If the site is unavailable from a browser too, replace the link with an archived copy (web.archive.org)
+      or remove it.
+
+  empty_anchor:
+    title: Links without text
+    description: >-
+      The link has no anchor text, aria-label or alt on a nested image. The search engine cannot tell what
+      the target page is about, and screen readers cannot announce it.
+    recommendation: Add text, an aria-label or an alt for images inside links.
+    message: "Links without text: $count (for example: $examples)"
+    fix: |
+      ```html
+      <!-- Bad -->
+      <a href="/cart"><svg>...</svg></a>
+      <!-- Good -->
+      <a href="/cart" aria-label="Cart"><svg aria-hidden="true">...</svg></a>
+      <a href="/section/"><img src="icon.png" alt="Section name"></a>
+      ```
+
+  internal_nofollow:
+    title: Internal links with nofollow
+    description: nofollow on internal links disrupts the flow of link weight and the crawling of your own pages.
+    recommendation: Remove rel="nofollow" from internal links.
+    message: "Links: $count (for example: $examples)"
+    fix: |
+      If a page should not be indexed, use `noindex` on the page itself, not nofollow on the links to it.
+      For utility sections, a robots.txt disallow is acceptable.
+
+  insecure_links:
+    title: Links to HTTP versions of pages
+    description: HTTPS pages link to insecure http:// addresses.
+    recommendation: Replace the links with https:// versions.
+    message: "Links: $count (for example: $examples)"
+    fix: |
+      Do a bulk replace of `http://your-domain` with `https://your-domain` in the database and templates.
+      For external resources, check HTTPS support and update the links.
+
+  too_many_links:
+    title: Too many links on a page
+    description: More than $max_links links on a page dilute the weight passed and make navigation harder.
+    recommendation: Reduce the number of links, keeping the meaningful ones.
+    message: "Links on the page: $count"
+    fix: |
+      Simplify mega menus, group links, remove duplicate navigation blocks,
+      and use pagination or lazy loading for long lists.
+
+  no_outlinks:
+    title: Pages without outgoing internal links
+    description: >-
+      The page offers no way to other pages of the site: for a crawler it is a dead end, weight is not passed
+      on, and the visitor leaves. Pages whose menu is built by a script often look like this.
+    recommendation: Add regular links to other sections of the site.
+    message:
+      default: "Not a single followable internal link"
+      nofollow: "All links are closed by meta robots nofollow"
+    fix: |
+      - Output menus, breadcrumbs and content links in HTML as `<a href="/section/">`,
+        not as onclick handlers or buttons.
+      - Remove `nofollow` from meta robots unless the page is a utility page.
+
+  nofollow_inlinks_only:
+    title: Only nofollow links lead to the page
+    description: >-
+      An indexable page gets internal links only with the nofollow attribute or from pages with meta nofollow.
+      The search engine may not find it and passes it no weight.
+    recommendation: Give the page at least one regular internal link.
+    message: "Pages with the link: $pages ($examples)"
+    fix: |
+      Remove `rel="nofollow"` from links to this page in menus and templates. If the page should not be in
+      search, close it with noindex instead of the links to it.
+
+  single_inlink:
+    title: Pages with a single inbound link
+    description: >-
+      Only one page of the site links to this page. Such pages get little weight and are recrawled less often;
+      that is not enough for important landing pages.
+    recommendation: Link to important pages from menus, categories and related content.
+    message: "The only link is from $source"
+    fix: |
+      Add "related content" blocks, links from categories and breadcrumbs, and mention the page in topical
+      articles. Key pages deserve a link from the main menu.
+
+  to_non_indexable:
+    title: Internal links to non-indexable pages
+    description: >-
+      Links lead to pages that are noindex or have a canonical to another address. The crawler spends its
+      visits on pages that will not get into search, and the link weight is wasted.
+    recommendation: Link to the main indexable versions of pages.
+    message:
+      noindex: "The page is noindex. Pages with the link: $pages ($examples)"
+      canonical: "The page's canonical points to $final. Pages with the link: $pages ($examples)"
+      variants: "Links lead to addresses with a canonical to this page ($count addresses, for example: $variants). Pages with the link: $pages"
+    fix: |
+      - If the page is noindex by mistake, remove the directive.
+      - If it is a duplicate, replace the links with the address from its canonical.
+      - Utility pages (login, cart) are fine in site-wide blocks, but do not link to them from content.
+
+  non_descriptive_anchor:
+    title: Non-descriptive link text
+    description: >-
+      An anchor like "read more" or "here" tells the search engine nothing about the target page. Google uses
+      the link text to understand what the linked page is about.
+    recommendation: Say in the link text where it leads.
+    message: "“$text”: $links links on $pages pages (for example: $examples)"
+    fix: |
+      ```html
+      <!-- Bad -->
+      <a href="/services/audit/">Read more</a>
+      <!-- Good -->
+      <a href="/services/audit/">Read more about the site audit</a>
+      ```
+      If the design needs a short button, make the card title or the whole card the link instead of a
+      separate "Read more" button.
+
+  tracking_params:
+    title: Internal links with UTM tags and session ids
+    description: >-
+      Tracking tags and session parameters in internal links create duplicate pages for search engines and
+      overwrite the real traffic source in analytics.
+    recommendation: Use clean addresses without tags and sessions in internal links.
+    message: "Parameters: $params. Pages with the link: $pages ($examples)"
+    fix: |
+      - UTM tags belong only in external links to the site (ads, newsletters), not in menus and banners inside it.
+      - Keep the session id in a cookie, not in the URL (for PHP: `session.use_trans_sid = 0`,
+        `session.use_only_cookies = 1`).
+      - For addresses already indexed, output a canonical to the clean URL; for Yandex, add the parameters
+        to `Clean-param` in robots.txt.
+
+  malformed:
+    title: Malformed links
+    description: >-
+      Links a crawler cannot follow: navigation via JavaScript code in href, localhost or local file addresses,
+      typos in the protocol. Pages behind such links are not discovered, and visitors get an error.
+    recommendation: Replace them with regular links to working site addresses.
+    message:
+      javascript: "Navigation runs through JavaScript code. Pages with the link: $pages ($examples)"
+      local: "A link to localhost or a local file. Pages with the link: $pages ($examples)"
+      scheme: "A typo in the protocol. Pages with the link: $pages ($examples)"
+    fix: |
+      - Instead of `<a href="javascript:openPage('/page')">` use `<a href="/page">` and attach extra
+        behavior with an event handler.
+      - Links to `localhost`, `127.0.0.1` and `file://` are left over from development; replace them with
+        the live site's addresses.
+      - Check the protocol: `https://example.com/`, not `https//`, `https:/` or `htps://`.

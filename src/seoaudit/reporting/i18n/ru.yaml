@@ -59,6 +59,8 @@ notes:
   field_data_local: "данные реальных пользователей (Chrome UX Report) в этом аудите не запрашивались, скорость измерена лабораторно (Lighthouse)"
   catch_all_200: несуществующие адреса отвечают кодом 200 — см. «Несуществующие страницы не отдают 404»
   sitemap_truncated: sitemap слишком большой и прочитан не полностью
+  render_unavailable: отрисовка страниц в браузере в этом аудите не выполнялась
+  no_organization: на главной нет разметки Organization
   findings_truncated: список находок сокращён
 other_checks: Не применимо / пропущено
 checks_total: проверок

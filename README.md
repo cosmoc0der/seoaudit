@@ -3,8 +3,10 @@
 Modular website SEO auditor: a crawler, check plugins and a PDF report with recommendations
 and developer instructions.
 
-- **140 rules in 12 modules**: indexability, meta tags, content, links, images, performance,
-  PageSpeed/Core Web Vitals, mobile, security, HTML validity, structured data, URLs, hreflang.
+- **165 rules in 15 modules**: indexability, meta tags, content, links, images, performance,
+  PageSpeed/Core Web Vitals, accessibility, mobile, security, HTML validity, structured data, URLs, hreflang,
+  AI crawlers and cloaking, JavaScript rendering, GEO (readiness for AI search).
+- **Russian or English report** (`--lang ru|en`); a saved report can be re-rendered in the other language.
 - **Rules are data.** Thresholds, severities and texts live in YAML next to each module and
   can be overridden in the config without touching code.
 - **Reports:** PDF, HTML, JSON (the full model, for an API/SaaS), CSV (for developers and Excel).
@@ -19,7 +21,8 @@ pip install -e ".[browser,dev]"
 playwright install --only-shell chromium   # headless Chromium: PDF and local Lighthouse
 ```
 
-The `browser` extra (Playwright) is only needed for PDF. Without it the audit still runs and writes HTML, JSON and CSV.
+The `browser` extra (Playwright) is needed for PDF and for the `rendering` module. Without it the audit still runs
+and writes HTML, JSON and CSV, and the rendering rules are marked as skipped.
 If PDF is among the default formats, HTML is written instead. If PDF is requested explicitly
 (`-f pdf`), the CLI tells you what to install right away, before crawling.
 
@@ -31,6 +34,8 @@ seoaudit audit example.com -c config.yaml -f pdf,html,csv --max-pages 500
 seoaudit audit example.com -d pagespeed,html               # disable modules
 seoaudit render reports/example.com-20250905-1200.json -f pdf   # rebuild a report without recrawling
 seoaudit render reports/example.com-20250905-1200.json -f pdf --no-recommendations   # findings only, no recommendations (file gets a -findings suffix)
+seoaudit audit example.com --lang en                        # English report (file gets an -en suffix)
+seoaudit render reports/example.com-20250905-1200.json -f pdf --lang en   # translate a saved report
 seoaudit rules                                              # all rules with current thresholds
 seoaudit checks                                             # loaded modules
 ```
@@ -46,6 +51,10 @@ The `pagespeed` module takes Lighthouse data from one of two sources (`checks.pa
 | Private sites (staging, localhost, VPN) | no | yes |
 | Speed | several pages in parallel | ~25 s per page, strictly one at a time |
 | Score stability | same Google servers every time | depends on machine load |
+
+Besides performance and SEO, the same Lighthouse run supplies the Accessibility and Best Practices categories:
+failed audits are grouped into rules (names of controls, contrast, ARIA, document structure, tap targets),
+and audits other modules already cover (alt texts, `lang`, HTTPS, security headers) are left out.
 
 The default is `provider: auto`: the API when a key is set, local Lighthouse otherwise.
 Lighthouse is looked up in the global install (`npm i -g lighthouse`). If it is not there, it is installed
@@ -71,6 +80,41 @@ the required and recommended properties of Google rich results (as Rich Results 
 and flags markup for features Google has switched off (FAQ, HowTo).
 The vocabulary lives in `checks/structured_data/vocab.json`; to update it to the latest Schema.org release, run
 `python scripts/update_schema_vocab.py`.
+
+### JavaScript rendering
+
+The crawler reads the HTML the server sends, like Yandex, Bing and AI crawlers do. The `rendering` module opens
+the home page and the most linked-to pages (`max_pages: 10`) in headless Chromium, as Googlebot renders them,
+and compares the DOM with the server HTML: canonical, meta robots or the URL changed by scripts, a title or description
+that only JavaScript sets, text, internal links and JSON-LD that exist only after rendering.
+Images, media and fonts are not downloaded, which makes rendering several times faster.
+
+### Search and AI crawlers
+
+The `bots` module checks the site the way crawlers reach it:
+- robots.txt groups and server answers for AI search crawlers (OAI-SearchBot, ChatGPT-User, PerplexityBot,
+  Claude-SearchBot and others) apart from AI training crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot…):
+  blocking the first keeps the site out of AI answers, blocking the second is the owner's choice and is listed
+  for information only;
+- firewalls that refuse Googlebot, Bingbot or YandexBot by User-Agent (Cloudflare, WAF) while serving browsers;
+- cloaking: key pages are fetched as a browser and as Googlebot and compared (status, title, description,
+  canonical, robots, amount of text, external links). Spam links shown only to search engines are a typical sign
+  of a hacked site. Every difference is confirmed by a second browser load, so rotating blocks don't count;
+- `llms.txt`: presence, format and broken links.
+
+### GEO: readiness for AI search
+
+The report gathers everything that decides whether ChatGPT, Perplexity, Claude, Copilot and Google AI Overviews
+can read, trust and quote the site into one "GEO: AI search" section:
+- access for AI search crawlers and bingbot (Copilot answers from the Bing index, and ChatGPT search uses it too);
+- text that exists only after JavaScript, which AI crawlers never run;
+- `nosnippet` / short `max-snippet` (Google keeps such pages out of AI Overviews) and `noarchive` / `nocache`
+  for Bing (out of Copilot answers);
+- the brand as an entity: Organization markup on the home page and its `sameAs` profiles (Wikidata, LinkedIn…);
+- authorship and dates on articles, About / contact / privacy pages;
+- `lastmod` in the sitemap: missing, one date for every URL (the file's build time) or dates in the future;
+- long texts without subheadings that are hard to quote (for information);
+- `llms.txt`.
 
 From Python:
 
@@ -170,7 +214,9 @@ A complete example is in [examples/plugins/analytics](examples/plugins/analytics
 
 Texts can use the rule's `$params`; `message` can also use the finding data passed to `fail()`.
 `message` can be a dict of variants: `fail(..., key="short")` picks `message.short`.
-Texts are keyed by language (`ru`, `en`, …); the report uses the one matching `--lang` and falls back to English.
+Texts are keyed by language; the report uses the one matching `--lang` and falls back to English.
+A translation can also live next to the rules file: `rules.en.yaml` holds `rules: {rule_id: {title, description, …}}`
+and `terms`, the wording of codes a check puts into finding data (a device, a certificate error).
 
 ## Built on open source
 
@@ -195,7 +241,8 @@ Next steps:
    events go to Redis pub/sub → WebSocket.
 2. Storage: PostgreSQL (`AuditReport` in JSONB), PDFs in S3.
 3. Multi-tenancy: a rule config per organization (white-label via `report.meta`).
-4. Rendering JS sites (SPAs) through Playwright as an alternative crawler fetcher.
+4. Crawling JS sites (SPAs) through Playwright as an alternative crawler fetcher; today only a sample of key pages
+   is rendered, by the `rendering` module.
 5. Comparing audits over time (diff of findings by `rule_id` + `url`), scheduled monitoring.
 6. Checking structured data against visible content: product price, name and availability in JSON-LD
    must match the page text, or Google may remove rich results for misleading markup.

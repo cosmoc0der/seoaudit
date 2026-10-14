@@ -1,0 +1,116 @@
+category: indexability
+
+options:
+  max_pages: 10          # the home page and the most linked-to pages
+  concurrency: 3
+  timeout: 30            # seconds per page
+  settle_ms: 3000        # how long to wait for the network to go quiet after load
+  block: [image, media, font]
+
+rules:
+  js_indexing_changed:
+    severity: high
+    scope: site
+    refs: [https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics]
+    text:
+      ru:
+        title: JavaScript меняет canonical, meta robots или адрес страницы
+        description: >-
+          Сервер отдаёт в HTML одни директивы для поисковиков, а скрипты после загрузки подменяют их другими
+          или уводят на другой адрес. Google читает исходный HTML до отрисовки: если там `noindex`, страницу
+          он не отрисует вовсе, и снять запрет скриптом нельзя. Canonical, изменённый скриптом, Google может
+          учесть или проигнорировать. Яндекс, Bing и AI-роботы видят только исходный HTML.
+        recommendation: Выводите canonical и meta robots в исходном HTML и не меняйте их скриптами.
+        message:
+          url: "После JavaScript открывается другой адрес: $rendered"
+          canonical: "Canonical в HTML: $raw, после JS: $rendered"
+          robots: "Meta robots в HTML: «$raw», после JS: «$rendered»"
+        fix: |
+          - Формируйте `<link rel="canonical">` и `<meta name="robots">` на сервере, в шаблоне страницы.
+            В Next.js — `metadata` / `generateMetadata`, в Nuxt — `useHead` с SSR, во Vue/React без SSR —
+            пререндеринг.
+          - Проверьте плагины и теги в Google Tag Manager: они не должны трогать `<head>`.
+          - Редиректы делайте ответом сервера (301), а не через `location.href` в скрипте.
+          Проверка: «Просмотр кода страницы» (Ctrl+U) против вкладки Elements в DevTools.
+
+  js_meta_changed:
+    severity: medium
+    scope: site
+    category: meta
+    refs: [https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics]
+    text:
+      ru:
+        title: Title или description появляются только после JavaScript
+        description: >-
+          В исходном HTML title или description другие (часто общие для всего сайта или пустые), а нужные
+          подставляются скриптом. Google обычно видит итоговые, но с задержкой отрисовки; Яндекс, соцсети
+          при репостах и AI-роботы берут значения из исходного HTML.
+        recommendation: Выводите title и description каждой страницы в исходном HTML.
+        message:
+          title: "Title в HTML: «$raw», после JS: «$rendered»"
+          description: "Description в HTML: «$raw», после JS: «$rendered»"
+        fix: |
+          Включите серверный рендеринг `<head>`: Next.js `generateMetadata`, Nuxt `useSeoMeta` с SSR,
+          Angular `Meta`/`Title` с Angular SSR, react-helmet-async с SSR. Без SSR — пререндеринг страниц при сборке.
+
+  js_content:
+    severity: medium
+    scope: site
+    category: geo
+    params:
+      min_words: 100
+      max_raw_share: 0.5
+    refs: [https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics]
+    text:
+      ru:
+        title: Большая часть текста появляется только после JavaScript
+        description: >-
+          В отрисованной странице текста намного больше, чем в HTML от сервера. Google отрисовывает страницы
+          с задержкой и не всегда полностью. Яндекс выполняет JavaScript ограниченно, а GPTBot, ClaudeBot,
+          PerplexityBot и другие AI-роботы не выполняют его вовсе: для них этого текста нет.
+        recommendation: Отдавайте основной текст страницы в HTML с сервера (SSR или пререндеринг).
+        message: "Слов в HTML: $raw, после JS: $rendered"
+        fix: |
+          - Включите серверный рендеринг: Next.js / Nuxt (SSR или SSG), Angular SSR, Vite SSR, Astro.
+          - Если переписать нельзя — пререндеринг HTML-версий страниц при сборке.
+          - Подгружайте скриптом только второстепенное: отзывы, рекомендации, виджеты.
+
+  js_links:
+    severity: medium
+    scope: site
+    category: links
+    params:
+      min_links: 3
+    refs: [https://developers.google.com/search/docs/crawling-indexing/links-crawlable]
+    text:
+      ru:
+        title: Внутренние ссылки появляются только после JavaScript
+        description: >-
+          Часть ссылок на страницы сайта есть только в отрисованной странице. Роботы, которые не выполняют
+          JavaScript (AI-роботы, частично Яндекс), не найдут по ним страницы, а Google найдёт их позже,
+          после отрисовки.
+        recommendation: Выводите навигацию и ссылки на разделы в HTML с сервера.
+        message: "Ссылок только после JS: $count ($examples)"
+        fix: |
+          - Меню, каталог и пагинацию рендерите на сервере.
+          - Ссылки — обычные `<a href="/путь">`; у кнопок с `onclick` и у `<a>` без `href` робот не найдёт адрес.
+          - Блоки «Похожие», «Популярное», подгружаемые скриптом, дублируйте ссылками в HTML или в sitemap.
+
+  js_structured_data:
+    severity: low
+    scope: site
+    category: structured_data
+    refs: [https://developers.google.com/search/docs/appearance/structured-data/generate-structured-data-with-javascript]
+    text:
+      ru:
+        title: Микроразметка добавляется только скриптом
+        description: >-
+          JSON-LD появляется после выполнения JavaScript (часто через Google Tag Manager). Google такую
+          разметку читает, но позже и не всегда; для товаров он советует не генерировать её скриптом,
+          потому что цены и наличие в выдаче обновятся с задержкой. Яндекс и AI-роботы её не видят.
+        recommendation: Выводите JSON-LD в исходном HTML страницы.
+        message: "Только после JS: $types"
+        fix: |
+          Перенесите генерацию `<script type="application/ld+json">` из тегов GTM и клиентских скриптов
+          в серверный шаблон страницы. Проверка: Rich Results Test → «Посмотреть проверенную страницу» →
+          HTML, и «Просмотр кода страницы» (Ctrl+U) — разметка должна быть в обоих.

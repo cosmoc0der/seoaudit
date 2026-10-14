@@ -22,8 +22,13 @@ _FIELD_METRICS = {
     "INTERACTION_TO_NEXT_PAINT": "INP",
     "CUMULATIVE_LAYOUT_SHIFT_SCORE": "CLS",
 }
-_CRUX_CATEGORIES = {"AVERAGE": "требует улучшения", "SLOW": "плохо"}
-_DEVICES = {"mobile": "Смартфон", "desktop": "Компьютер"}
+_SECONDS = {"ru": "с", "en": "s"}
+# Lighthouse category: rules matching failed audits by id, and the rule that takes the rest.
+_AUDIT_GROUPS = {
+    "seo": ((), "lighthouse_seo"),
+    "accessibility": (("a11y_names", "a11y_contrast", "a11y_aria", "a11y_structure", "tap_targets"), "a11y_other"),
+    "best-practices": ((), "lighthouse_best_practices"),
+}
 
 
 class PageSpeedCheck(Check):
@@ -40,7 +45,8 @@ class PageSpeedCheck(Check):
             self._mark_all(self.skip, "lighthouse_unavailable")
             return
 
-        jobs = [(url, strategy) for url in self._sample_urls() for strategy in self.options["strategies"]]
+        urls = self.ctx.key_pages(self.options["max_pages"])
+        jobs = [(url, strategy) for url in urls for strategy in self.options["strategies"]]
         semaphore = asyncio.Semaphore(runner.concurrency)
 
         async def run(url: str, strategy: str) -> Measurement | Exception:
@@ -88,23 +94,15 @@ class PageSpeedCheck(Check):
         for rule in self.rules:
             mark(rule, note)
 
-    def _sample_urls(self) -> list[str]:
-        home = self.ctx.site.base_url
-        others = sorted(
-            (p for p in self.ctx.html_pages() if p.url != home),
-            key=lambda p: len(self.ctx.inlinks.get(p.url, [])),
-            reverse=True,
-        )
-        return [home, *(p.url for p in others[: self.options["max_pages"] - 1])]
-
     def _evaluate(self, url: str, strategy: str, lighthouse: dict[str, Any]) -> None:
         audits = lighthouse.get("audits", {})
         categories = lighthouse.get("categories", {})
-        base = {"strategy": strategy, "device": _DEVICES.get(strategy, strategy)}
+        base = {"strategy": strategy}
 
         score = round((categories.get("performance", {}).get("score") or 0) * 100)
         if score < self.params("performance_score")["min_score"]:
-            opportunities = _opportunities(audits)
+            # Lighthouse runs in the report language, so its audit titles here are already translated.
+            opportunities = _opportunities(audits, _SECONDS.get(self.ctx.config.lang, "s"))
             key = None if opportunities else "bare"
             self.fail("performance_score", url, key=key, score=score, opportunities=opportunities, **base)
 
@@ -118,13 +116,20 @@ class PageSpeedCheck(Check):
             if value is not None and value > self.params(rule)[param]:
                 self.fail(rule, url, value=fmt(value), **base)
 
-        failed_seo = [
-            audits[ref["id"]]["title"]
-            for ref in categories.get("seo", {}).get("auditRefs", [])
-            if ref.get("weight") and audits.get(ref["id"], {}).get("score") == 0
-        ]
-        if failed_seo:
-            self.fail("lighthouse_seo", url, audits=failed_seo, **base)
+        for category, (groups, rest) in _AUDIT_GROUPS.items():
+            failed = [
+                ref["id"]
+                for ref in categories.get(category, {}).get("auditRefs", [])
+                if ref.get("weight") and audits.get(ref["id"], {}).get("score") == 0
+            ]
+            listed = set(self.params(rest)["ignore"])
+            for rule in groups:
+                ids = self.params(rule)["audits"]
+                listed.update(ids)
+                if matched := [a for a in failed if a in ids]:
+                    self.fail(rule, url, audits=_describe_audits(audits, matched), **base)
+            if remaining := [a for a in failed if a not in listed]:
+                self.fail(rest, url, audits=_describe_audits(audits, remaining), **base)
 
     def _evaluate_field(self, url: str, strategy: str, field: dict[str, Any]) -> bool:
         metrics = field.get("metrics")
@@ -137,18 +142,23 @@ class PageSpeedCheck(Check):
                 return True
             self._origin_reported.add(strategy)
             url = self.ctx.site.base_url
-        failing = [
-            f"{label}: {_CRUX_CATEGORIES.get(metric['category'], metric['category'])}"
-            for key, label in _FIELD_METRICS.items()
-            if (metric := metrics.get(key)) and metric.get("category") not in (None, "FAST")
-        ]
-        if failing:
-            device = _DEVICES.get(strategy, strategy)
-            self.fail("field_cwv", url, key="origin" if origin else None, metrics=failing, strategy=strategy, device=device)
+        variant = "origin" if origin else None
+        for field_key, label in _FIELD_METRICS.items():
+            if (metric := metrics.get(field_key)) and metric.get("category") not in (None, "FAST"):
+                self.fail("field_cwv", url, key=variant, metric=label, rating=metric["category"], strategy=strategy)
         return True
 
 
-def _opportunities(audits: dict[str, Any], limit: int = 5) -> list[str]:
+def _describe_audits(audits: dict[str, Any], ids: list[str]) -> list[str]:
+    result = []
+    for audit_id in ids:
+        audit = audits[audit_id]
+        count = len((audit.get("details") or {}).get("items") or [])
+        result.append(f"{audit['title']} ({count})" if count else audit["title"])
+    return result
+
+
+def _opportunities(audits: dict[str, Any], seconds: str, limit: int = 5) -> list[str]:
     # Lighthouse 13 moved most opportunities into insight audits that report metricSavings instead.
     savings = {}
     for audit in audits.values():
@@ -159,4 +169,4 @@ def _opportunities(audits: dict[str, Any], limit: int = 5) -> list[str]:
         if ms > 100:
             savings[audit["title"]] = max(ms, savings.get(audit["title"], 0))
     top = sorted(savings.items(), key=lambda item: item[1], reverse=True)[:limit]
-    return [f"{title} (−{ms / 1000:.1f} с)" for title, ms in top]
+    return [f"{title} (−{ms / 1000:.1f} {seconds})" for title, ms in top]

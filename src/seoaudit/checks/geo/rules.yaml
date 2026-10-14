@@ -1,0 +1,177 @@
+category: geo
+
+options:
+  # A page with only og:type article counts as an article when it has this many paragraphs of this many words.
+  article_paragraphs: 6
+  paragraph_words: 30
+
+rules:
+  snippet_restricted:
+    severity: medium
+    params:
+      min_snippet: 50          # max-snippet below this many characters leaves nothing to quote
+    refs:
+      - https://developers.google.com/search/docs/appearance/ai-features
+      - https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag
+      - https://blogs.bing.com/webmaster/september-2023/Announcing-new-options-for-webmasters-to-control-usage-of-their-content-in-Bing-Chat
+    text:
+      ru:
+        title: Директивы robots запрещают цитировать страницу
+        description: >-
+          Страница открыта для индексации, но meta robots или заголовок X-Robots-Tag запрещают показывать
+          её текст. Google не использует такие страницы в AI-обзорах и AI Mode: nosnippet или max-snippet
+          меньше пары предложений оставляют только ссылку. Bing по noarchive не берёт страницу в ответы
+          Copilot, а по nocache показывает в них только заголовок и сниппет. Ответы ChatGPT во многом
+          строятся на индексе Bing.
+        recommendation: Уберите ограничения сниппета там, где страница должна попадать в AI-ответы.
+        message:
+          nosnippet: "nosnippet: текст страницы не показывается ни в сниппете, ни в AI-ответах"
+          max_snippet: "max-snippet:$value — слишком короткий фрагмент для цитаты"
+          bing: "Для Bing: $directives"
+        fix: |
+          Найдите источник директивы:
+          - `<meta name="robots" content="nosnippet">`, `<meta name="googlebot" ...>`, `<meta name="bingbot" ...>`;
+          - заголовок `X-Robots-Tag` в ответе сервера (nginx `add_header`, `.htaccess`, CDN);
+          - настройки SEO-плагина CMS.
+
+          Чтобы скрыть от сниппетов только часть страницы, а не всю, используйте атрибут `data-nosnippet`
+          на конкретном блоке:
+          ```html
+          <div data-nosnippet>Текст, который не должен попадать в сниппеты</div>
+          ```
+
+  author_missing:
+    severity: low
+    refs:
+      - https://developers.google.com/search/docs/appearance/structured-data/article#author-bp
+      - https://developers.google.com/search/docs/fundamentals/creating-helpful-content
+    text:
+      ru:
+        title: У статей не указан автор
+        description: >-
+          Страница оформлена как статья (разметка Article, BlogPosting или og:type article), но автора не
+          видно ни в разметке, ни в meta-тегах, ни в коде страницы. Автор — один из главных сигналов
+          опыта и экспертизы (E-E-A-T) для Google, и AI-ассистенты охотнее цитируют материалы с понятным
+          источником.
+        recommendation: Указывайте автора у каждой статьи — на странице и в разметке, со ссылкой на страницу автора.
+        fix: |
+          На странице — подпись со ссылкой на страницу автора, в разметке — свойство author:
+          ```json
+          {
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": "Заголовок",
+            "author": {
+              "@type": "Person",
+              "name": "Иван Петров",
+              "url": "https://example.com/authors/ivan-petrov",
+              "sameAs": ["https://www.linkedin.com/in/ivan-petrov"]
+            }
+          }
+          ```
+          На странице автора опишите его опыт и квалификацию. Для материалов от имени компании указывайте
+          `"@type": "Organization"`.
+
+  date_missing:
+    severity: low
+    refs: [https://developers.google.com/search/docs/appearance/publication-dates]
+    text:
+      ru:
+        title: У статей нет даты публикации
+        description: >-
+          Страница оформлена как статья, но дату публикации или обновления не найти ни в разметке, ни в
+          meta-тегах, ни в теге `<time>`. Свежесть — один из сигналов, по которым поисковики и
+          AI-ассистенты выбирают, какой источник показать. Без даты материал трудно отличить от устаревшего.
+        recommendation: Показывайте дату публикации и обновления на странице и дублируйте их в разметке.
+        fix: |
+          ```html
+          <time datetime="2026-03-15">15 марта 2026</time>
+          ```
+          ```json
+          "datePublished": "2026-03-15T10:00:00+03:00",
+          "dateModified": "2026-04-02T09:30:00+03:00"
+          ```
+          Меняйте dateModified только при существенной правке текста, а не при каждой сборке сайта.
+
+  trust_pages_missing:
+    severity: low
+    scope: site
+    params:
+      # Matched against the path and anchor text of every internal link.
+      patterns:
+        about: '/(?:about|o-nas|o-kompanii|company|team)\b|о нас|о компании|о проекте|about'
+        contact: '/(?:contact|kontakt)|контакт|contact'
+        privacy: '/(?:privacy|policy|konfidencial|personal-data)|конфиденциальн|персональн|privacy'
+    refs: [https://static.googleusercontent.com/media/guidelines.raterhub.com/en//searchqualityevaluatorguidelines.pdf]
+    text:
+      ru:
+        title: Не найдены страницы, подтверждающие надёжность сайта
+        description: >-
+          Ни одна внутренняя ссылка не ведёт на страницу «О компании», контакты или политику
+          конфиденциальности. По руководству асессоров Google по этим страницам оценивают, кто стоит за
+          сайтом и можно ли ему доверять. AI-ассистенты по ним определяют, что за организация владеет сайтом.
+        recommendation: Создайте недостающие страницы и поставьте на них ссылки из меню или подвала сайта.
+        message:
+          about: "Нет ссылки на страницу «О компании»"
+          contact: "Нет ссылки на страницу контактов"
+          privacy: "Нет ссылки на политику конфиденциальности"
+        fix: |
+          - **О компании:** юридическое название, история, команда, реквизиты, лицензии и награды.
+          - **Контакты:** адрес, телефон, email, карта, часы работы. Те же данные — в разметке Organization.
+          - **Политика конфиденциальности:** в России обязательна при сборе персональных данных (152-ФЗ).
+
+          Ссылки на эти страницы обычно ставят в подвал сайта, чтобы они были на каждой странице.
+
+  sitemap_lastmod:
+    severity: low
+    scope: site
+    params:
+      max_missing_share: 0.5
+      min_urls_same: 20
+    refs:
+      - https://www.sitemaps.org/protocol.html#lastmoddef
+      - https://blogs.bing.com/webmaster/July-2025/Keeping-Content-Discoverable-with-Sitemaps-in-AI-Powered-Search
+    text:
+      ru:
+        title: В sitemap нет достоверных дат изменения (lastmod)
+        description: >-
+          По lastmod роботы решают, какие страницы перепроверить. Bing прямо называет его ключевым сигналом
+          для AI-поиска, Google учитывает его, если даты правдивы. Пропущенные, одинаковые для всех URL или
+          будущие даты лишают сигнал смысла: обновлённые страницы попадают в индекс и в AI-ответы позже.
+        recommendation: Указывайте в lastmod дату последнего существенного изменения каждой страницы.
+        message:
+          missing: "lastmod нет у $missing из $total URL"
+          same: "У всех $total URL одна дата: $value — похоже на дату генерации файла"
+          future: "Даты в будущем ($count): $examples"
+          invalid: "Дата не в формате W3C Datetime ($count): $examples"
+        fix: |
+          ```xml
+          <url>
+            <loc>https://example.com/page</loc>
+            <lastmod>2026-03-15T10:00:00+03:00</lastmod>
+          </url>
+          ```
+          - Берите дату из поля «изменено» записи в CMS, а не текущее время генерации sitemap.
+          - Не обновляйте lastmod при правках шаблона, счётчиков или комментариев.
+          - Формат: `2026-03-15` или `2026-03-15T10:00:00+03:00`.
+
+  unstructured_text:
+    severity: info
+    params:
+      min_words: 800
+    refs: [https://developers.google.com/search/docs/appearance/ai-features]
+    text:
+      ru:
+        title: Длинный текст без подзаголовков
+        description: >-
+          На странице много текста, но нет ни одного подзаголовка H2 или H3. AI-ассистенты цитируют
+          фрагменты, которые отвечают на конкретный вопрос. Сплошной текст трудно разбить на такие
+          фрагменты, и в ответ скорее попадёт хорошо структурированная страница конкурента. Читателям
+          такой текст тоже неудобен.
+        recommendation: Разбейте текст подзаголовками и начинайте каждый раздел с прямого ответа.
+        message: "Слов: $words, подзаголовков H2/H3 нет"
+        fix: |
+          - Разделы по 150–300 слов под подзаголовками H2/H3; подзаголовок может быть вопросом, который
+            задаёт пользователь.
+          - Первое предложение раздела — короткий ответ, дальше подробности.
+          - Перечисления и сравнения оформляйте списками и таблицами.

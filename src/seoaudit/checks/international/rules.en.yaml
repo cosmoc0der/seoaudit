@@ -1,0 +1,78 @@
+rules:
+  invalid_code:
+    title: Invalid language code in hreflang
+    description: The language code must be ISO 639-1 (optionally with an ISO 3166-1 region). Invalid codes are ignored.
+    recommendation: Fix the language and region codes.
+    message: "Codes: $codes"
+    fix: |
+      Common mistakes: `en-uk` → `en-gb`, `jp` → `ja`, `ua` → `uk`, `kz` → `kk` (Kazakh) or `ru-kz`
+      (Russian for Kazakhstan), `cn` → `zh-cn`.
+      ```html
+      <link rel="alternate" hreflang="ru-kz" href="https://example.kz/ru/">
+      <link rel="alternate" hreflang="kk" href="https://example.kz/kk/">
+      ```
+
+  no_self_reference:
+    title: hreflang does not reference the page itself
+    description: The hreflang set must include a link to the current page with its own language.
+    recommendation: Add a self-referencing hreflang.
+    fix: |
+      On every language version, output the same full set of links, including the current one:
+      ```html
+      <link rel="alternate" hreflang="ru" href="https://example.com/ru/page/">
+      <link rel="alternate" hreflang="en" href="https://example.com/en/page/">
+      <link rel="alternate" hreflang="x-default" href="https://example.com/en/page/">
+      ```
+
+  no_x_default:
+    title: No hreflang x-default
+    description: x-default names the version for users whose language matches none of the versions.
+    recommendation: Add an x-default pointing to the main page or a language selector page.
+    fix: |
+      ```html
+      <link rel="alternate" hreflang="x-default" href="https://example.com/">
+      ```
+
+  no_return_link:
+    title: Missing hreflang return link
+    description: If page A links to B with hreflang, B must link back to A. Otherwise the pair is ignored.
+    recommendation: Make hreflang links reciprocal between all language versions.
+    message: "$lang → $target does not link back"
+    fix: |
+      Generate the hreflang block from a single source (a translation mapping table) so that every version
+      outputs the same full set of links.
+
+  broken_target:
+    title: hreflang points to an unavailable page or a redirect
+    description: Alternate versions must answer 200 without redirects, otherwise the link is ignored.
+    recommendation: Use working final URLs in hreflang.
+    message: "hreflang=$lang, response: $status. Pages referencing it: $pages ($examples)"
+    fix: |
+      Check that the translated version exists and use its canonical URL (protocol, www, trailing slash
+      as in the target page's canonical).
+
+  target_non_indexable:
+    title: hreflang points to a non-indexable page
+    description: >-
+      hreflang points to a page that is noindex or has a canonical to another address. Google accepts only
+      links between canonical indexable versions and ignores the rest.
+    recommendation: Use the canonical indexable URLs of the language versions in hreflang.
+    message:
+      noindex: "The page is noindex. Pages referencing it: $pages ($examples)"
+      canonical: "The page's canonical points to $final. Pages referencing it: $pages ($examples)"
+    fix: |
+      - If the language version is noindex by mistake, remove the directive.
+      - If it has a canonical to another address, use exactly that address in hreflang.
+      Every language version must have a canonical to itself, not to the main-language version.
+
+  duplicate_lang:
+    title: Several addresses for one language in hreflang
+    description: >-
+      Several different pages are given for one language code. The search engine does not know which to show
+      to users of that language and may ignore the whole hreflang group.
+    recommendation: Keep exactly one address per language (and region) code.
+    message: "hreflang=$lang points to different addresses: $urls (codes repeated: $count)"
+    fix: |
+      Repeats usually appear when both the theme and a multilingual plugin output hreflang, or when both the
+      old and the new address of a page are in the group. Keep one source of markup; for different regions
+      of one language use codes with a region (`en-us`, `en-gb`).

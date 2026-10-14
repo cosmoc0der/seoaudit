@@ -171,6 +171,12 @@ class Page:
             "header": _robots_directives(self.headers.get("x-robots-tag", ""), agent),
         }
 
+    def robots_for(self, agent: str) -> set[str]:
+        """Directives another crawler (bingbot) follows: generic ones plus those addressed to it."""
+        agent = agent.lower()
+        values = [*self.meta_tags.get("robots", []), *self.meta_tags.get(agent, []), self.headers.get("x-robots-tag", "")]
+        return {d for v in values for d in _robots_directives(v, agent)}
+
     @cached_property
     def robots(self) -> set[str]:
         directives = set().union(*self.robots_sources.values())

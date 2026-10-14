@@ -1,0 +1,54 @@
+rules:
+  doctype_missing:
+    title: Missing DOCTYPE
+    description: Without `<!DOCTYPE html>` the browser switches to quirks mode, and the layout may render incorrectly.
+    recommendation: Add `<!DOCTYPE html>` as the first line of the document.
+    fix: |
+      ```html
+      <!DOCTYPE html>
+      <html lang="en">
+      ```
+      Nothing may precede the DOCTYPE: no whitespace, BOM or PHP/template engine output.
+
+  duplicate_ids:
+    title: Duplicate element ids
+    description: The id attribute must be unique. Duplicates break anchor links, JS handlers and label/input bindings.
+    recommendation: Make ids unique.
+    message: "Duplicate ids: $count (for example: $examples)"
+    fix: |
+      Duplicates usually come from template loops and reused components.
+      Add a unique suffix to the id (`product-{{ id }}`) or use classes for styling.
+
+  deprecated_tags:
+    title: Deprecated HTML tags
+    description: Deprecated tags are not part of the HTML5 standard and may be handled incorrectly.
+    recommendation: Replace deprecated tags with semantic markup and CSS.
+    message: "Found: $found"
+    fix: |
+      - `<font>`, `<center>`, `<big>` → CSS (`font-size`, `text-align: center`).
+      - `<strike>` → `<s>` or `<del>`; `<acronym>` → `<abbr>`; `<tt>` → `<code>`.
+      - `<frame>`/`<frameset>` → regular layout; `<marquee>` → CSS animation.
+      Such tags often come from WYSIWYG editors; set up HTML cleanup on save.
+
+  obsolete_plugins:
+    title: Obsolete plugins in use (Flash, Java, Silverlight)
+    description: Browsers no longer support these technologies, so the content is visible to neither users nor crawlers.
+    recommendation: Replace the plugins with HTML5 (video, canvas, SVG).
+    message: "Elements: $count"
+    fix: |
+      Re-encode videos to MP4/WebM and use `<video>`; move animations to CSS/SVG/Canvas.
+
+  w3c_errors:
+    title: HTML validation errors (W3C)
+    description: >-
+      The W3C validator found more than $max_errors markup errors. Serious errors (unclosed tags, wrong
+      nesting) can distort how a crawler sees the page content. The validator parses the page without
+      JavaScript, so it also counts the contents of `<noscript>`; this explains "Duplicate ID" errors that
+      the "Duplicate element ids" rule does not show.
+    recommendation: Fix the markup errors, starting with unclosed tags and wrong nesting.
+    message: "Markup errors: $count (the list is in the validator report)"
+    fix: |
+      Check the page at https://validator.w3.org/nu/ and fix the errors in the templates.
+      Priority: unclosed or extra tags, block elements inside `<p>` and `<a>`,
+      duplicate attributes, `<head>` elements inside `<body>`.
+      Warnings and minor inconsistencies have practically no effect on rankings.

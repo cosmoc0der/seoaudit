@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from conftest import SITE
+from conftest import OFFLINE, SITE
 from seoaudit.core import http
 from seoaudit.core.config import AuditConfig, ConfigError
 from seoaudit.core.engine import Auditor
@@ -11,7 +11,6 @@ from seoaudit.core.models import AuditReport, RuleStatus
 from seoaudit.core.urls import normalize_url, pretty_url
 from seoaudit.reporting.html import local_urls, plural, render_html
 
-OFFLINE = {"checks": {"pagespeed": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}}
 
 
 def run(transport, **config) -> AuditReport:

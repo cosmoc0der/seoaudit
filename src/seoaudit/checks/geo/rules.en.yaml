@@ -1,0 +1,120 @@
+rules:
+  snippet_restricted:
+    title: Robots directives forbid quoting the page
+    description: >-
+      The page is open to indexing, but meta robots or the X-Robots-Tag header forbid showing its text. Google
+      does not use such pages in AI Overviews and AI Mode: nosnippet, or a max-snippet shorter than a couple of
+      sentences, leaves only a link. With noarchive Bing keeps the page out of Copilot answers, and with nocache
+      it shows only the title and snippet there. ChatGPT answers rely heavily on the Bing index.
+    recommendation: Remove the snippet restrictions where the page should appear in AI answers.
+    message:
+      nosnippet: "nosnippet: the page text is shown neither in the snippet nor in AI answers"
+      max_snippet: "max-snippet:$value is too short to quote"
+      bing: "For Bing: $directives"
+    fix: |
+      Find the source of the directive:
+      - `<meta name="robots" content="nosnippet">`, `<meta name="googlebot" ...>`, `<meta name="bingbot" ...>`;
+      - the `X-Robots-Tag` header in the server response (nginx `add_header`, `.htaccess`, CDN);
+      - the CMS SEO plugin settings.
+
+      To hide only part of the page from snippets rather than all of it, put the `data-nosnippet` attribute
+      on that block:
+      ```html
+      <div data-nosnippet>Text that must not appear in snippets</div>
+      ```
+
+  author_missing:
+    title: Articles have no author
+    description: >-
+      The page is marked up as an article (Article, BlogPosting or og:type article), but no author is visible in
+      the markup, the meta tags or the page code. The author is one of the main signals of experience and
+      expertise (E-E-A-T) for Google, and AI assistants prefer to cite material with a clear source.
+    recommendation: Name the author of every article, on the page and in the markup, with a link to the author page.
+    fix: |
+      On the page, a byline linking to the author page; in the markup, the author property:
+      ```json
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Title",
+        "author": {
+          "@type": "Person",
+          "name": "Jane Smith",
+          "url": "https://example.com/authors/jane-smith",
+          "sameAs": ["https://www.linkedin.com/in/jane-smith"]
+        }
+      }
+      ```
+      Describe the author's experience and qualifications on the author page. For material published on behalf
+      of the company, use `"@type": "Organization"`.
+
+  date_missing:
+    title: Articles have no publication date
+    description: >-
+      The page is marked up as an article, but no publication or update date can be found in the markup, the
+      meta tags or a `<time>` tag. Freshness is one of the signals search engines and AI assistants use to choose
+      which source to show. Without a date, the material is hard to tell from an outdated one.
+    recommendation: Show the publication and update dates on the page and repeat them in the markup.
+    fix: |
+      ```html
+      <time datetime="2026-03-15">March 15, 2026</time>
+      ```
+      ```json
+      "datePublished": "2026-03-15T10:00:00+03:00",
+      "dateModified": "2026-04-02T09:30:00+03:00"
+      ```
+      Change dateModified only on a substantial text edit, not on every site build.
+
+  trust_pages_missing:
+    title: Pages that establish trust not found
+    description: >-
+      No internal link leads to an About page, contacts or a privacy policy. Google's quality rater guidelines
+      use these pages to judge who is behind a site and whether it can be trusted. AI assistants use them to
+      determine which organization owns the site.
+    recommendation: Create the missing pages and link to them from the menu or footer.
+    message:
+      about: "No link to an About page"
+      contact: "No link to a contact page"
+      privacy: "No link to a privacy policy"
+    fix: |
+      - **About:** legal name, history, team, company details, licenses and awards.
+      - **Contacts:** address, phone, email, map, opening hours. The same data goes into Organization markup.
+      - **Privacy policy:** required by law in most countries when personal data is collected (GDPR and similar).
+
+      Links to these pages usually go in the site footer so they are on every page.
+
+  sitemap_lastmod:
+    title: The sitemap has no reliable modification dates (lastmod)
+    description: >-
+      Crawlers use lastmod to decide which pages to recheck. Bing calls it a key signal for AI search, and Google
+      uses it when the dates are truthful. Missing dates, one date for every URL or dates in the future make the
+      signal meaningless: updated pages reach the index and AI answers later.
+    recommendation: Put the date of each page's last substantial change in lastmod.
+    message:
+      missing: "lastmod missing for $missing of $total URLs"
+      same: "All $total URLs have the same date: $value — looks like the file generation date"
+      future: "Dates in the future ($count): $examples"
+      invalid: "Date not in W3C Datetime format ($count): $examples"
+    fix: |
+      ```xml
+      <url>
+        <loc>https://example.com/page</loc>
+        <lastmod>2026-03-15T10:00:00+03:00</lastmod>
+      </url>
+      ```
+      - Take the date from the CMS record's "modified" field, not the current sitemap generation time.
+      - Do not update lastmod on template, counter or comment changes.
+      - Format: `2026-03-15` or `2026-03-15T10:00:00+03:00`.
+
+  unstructured_text:
+    title: Long text without subheadings
+    description: >-
+      The page has a lot of text but not a single H2 or H3 subheading. AI assistants quote fragments that answer
+      a specific question. A wall of text is hard to split into such fragments, and a competitor's well-structured
+      page is more likely to make it into the answer. Readers find such text inconvenient too.
+    recommendation: Break the text up with subheadings and start each section with a direct answer.
+    message: "Words: $words, no H2/H3 subheadings"
+    fix: |
+      - Sections of 150–300 words under H2/H3 subheadings; a subheading can be the question a user asks.
+      - The first sentence of a section is a short answer, details follow.
+      - Format enumerations and comparisons as lists and tables.

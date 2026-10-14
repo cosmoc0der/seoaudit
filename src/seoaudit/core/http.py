@@ -113,10 +113,13 @@ async def fetch(
     max_redirects: int = 10,
     follow: bool = True,
     attempts: int = 2,
+    headers: dict[str, str] | None = None,
 ) -> FetchResult:
     # Slow sites time out under crawl load and answer fine moments later.
     for attempt in range(1, attempts + 1):
-        result, timed_out = await _fetch_once(client, url, method, read_body, keep_body, max_bytes, max_redirects, follow)
+        result, timed_out = await _fetch_once(
+            client, url, method, read_body, keep_body, max_bytes, max_redirects, follow, headers
+        )
         if not timed_out or attempt == attempts:
             return result
         await asyncio.sleep(_RETRY_DELAY * attempt)
@@ -132,6 +135,7 @@ async def _fetch_once(
     max_bytes: int,
     max_redirects: int,
     follow: bool,
+    headers: dict[str, str] | None,
 ) -> tuple[FetchResult, bool]:
     result = FetchResult(url=url, final_url=url)
     started = perf_counter()
@@ -141,7 +145,7 @@ async def _fetch_once(
         hop_started = perf_counter()
         result.final_url = current
         try:
-            response = await _send(client, method, current)
+            response = await _send(client, method, current, headers)
         except Exception as exc:
             result.error = _describe(exc)
             return result, isinstance(exc, httpx.TimeoutException)
@@ -176,11 +180,13 @@ async def _fetch_once(
     return result, False
 
 
-async def _send(client: httpx.AsyncClient, method: str, url: str, attempts: int = 2) -> httpx.Response:
+async def _send(
+    client: httpx.AsyncClient, method: str, url: str, headers: dict[str, str] | None, attempts: int = 2
+) -> httpx.Response:
     # After an h2 protocol failure the transport switches the host to HTTP/1.1, so the retry goes there.
     for attempt in range(attempts):
         try:
-            return await client.send(client.build_request(method, url), stream=True)
+            return await client.send(client.build_request(method, url, headers=headers), stream=True)
         except (httpx.TimeoutException, httpx.UnsupportedProtocol, httpx.InvalidURL, ValueError):
             raise
         except Exception:

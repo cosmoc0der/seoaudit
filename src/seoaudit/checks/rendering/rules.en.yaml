@@ -1,0 +1,74 @@
+rules:
+  js_indexing_changed:
+    title: JavaScript changes the canonical, meta robots or page address
+    description: >-
+      The server sends one set of directives for search engines in the HTML, and scripts replace them after
+      loading or navigate to another address. Google reads the source HTML before rendering: if it has
+      `noindex`, Google does not render the page at all, and a script cannot lift the ban. A canonical changed
+      by a script may or may not be honored. Yandex, Bing and AI crawlers see only the source HTML.
+    recommendation: Output the canonical and meta robots in the source HTML and do not change them with scripts.
+    message:
+      url: "After JavaScript a different address opens: $rendered"
+      canonical: "Canonical in HTML: $raw, after JS: $rendered"
+      robots: "Meta robots in HTML: “$raw”, after JS: “$rendered”"
+    fix: |
+      - Build `<link rel="canonical">` and `<meta name="robots">` on the server, in the page template.
+        In Next.js use `metadata` / `generateMetadata`, in Nuxt `useHead` with SSR, in Vue/React without SSR
+        use prerendering.
+      - Check plugins and Google Tag Manager tags: they must not touch `<head>`.
+      - Do redirects as a server response (301), not via `location.href` in a script.
+      Check: "View page source" (Ctrl+U) against the Elements tab in DevTools.
+
+  js_meta_changed:
+    title: Title or description appear only after JavaScript
+    description: >-
+      The source HTML has a different title or description (often site-wide or empty), and the right ones are
+      inserted by a script. Google usually sees the final ones, but with a rendering delay; Yandex, social
+      networks when sharing, and AI crawlers take the values from the source HTML.
+    recommendation: Output each page's title and description in the source HTML.
+    message:
+      title: "Title in HTML: “$raw”, after JS: “$rendered”"
+      description: "Description in HTML: “$raw”, after JS: “$rendered”"
+    fix: |
+      Render `<head>` on the server: Next.js `generateMetadata`, Nuxt `useSeoMeta` with SSR,
+      Angular `Meta`/`Title` with Angular SSR, react-helmet-async with SSR. Without SSR, prerender pages at build time.
+
+  js_content:
+    title: Most of the text appears only after JavaScript
+    description: >-
+      The rendered page has far more text than the HTML from the server. Google renders pages with a delay and
+      not always fully. Yandex runs JavaScript in a limited way, and GPTBot, ClaudeBot, PerplexityBot and other
+      AI crawlers do not run it at all: for them this text does not exist.
+    recommendation: Serve the page's main text in the server HTML (SSR or prerendering).
+    message: "Words in HTML: $raw, after JS: $rendered"
+    fix: |
+      - Enable server-side rendering: Next.js / Nuxt (SSR or SSG), Angular SSR, Vite SSR, Astro.
+      - If a rewrite is not possible, prerender HTML versions of the pages at build time.
+      - Load only secondary content with scripts: reviews, recommendations, widgets.
+
+  js_links:
+    title: Internal links appear only after JavaScript
+    description: >-
+      Some links to the site's pages exist only in the rendered page. Crawlers that do not run JavaScript
+      (AI crawlers, partly Yandex) will not find pages through them, and Google will find them later,
+      after rendering.
+    recommendation: Output navigation and section links in the server HTML.
+    message: "Links only after JS: $count ($examples)"
+    fix: |
+      - Render menus, the catalog and pagination on the server.
+      - Use plain `<a href="/path">` links; crawlers cannot find the address of buttons with `onclick` or of
+        `<a>` without `href`.
+      - Duplicate script-loaded "Similar" and "Popular" blocks with links in the HTML or in the sitemap.
+
+  js_structured_data:
+    title: Structured data is added only by a script
+    description: >-
+      JSON-LD appears after JavaScript runs (often via Google Tag Manager). Google reads such markup, but later
+      and not always; for products it advises against generating it with scripts, because prices and
+      availability in search results update with a delay. Yandex and AI crawlers do not see it.
+    recommendation: Output JSON-LD in the page's source HTML.
+    message: "Only after JS: $types"
+    fix: |
+      Move the generation of `<script type="application/ld+json">` from GTM tags and client scripts into the
+      server page template. Check: Rich Results Test → View tested page → HTML, and "View page source"
+      (Ctrl+U); the markup must be in both.

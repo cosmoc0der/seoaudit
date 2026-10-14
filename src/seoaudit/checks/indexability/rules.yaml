@@ -111,7 +111,8 @@ rules:
         message:
           http: "Файл недоступен, ответ: $error"
           html: "Вместо XML отдаётся HTML-страница ($error)"
-          parse: "Невалидный XML: $error"
+          parse: "Невалидный XML: строка $line, позиция $col"
+          parse_structure: "Невалидный XML: нарушена структура файла"
         fix: |
           Проверьте файл валидатором (например, https://www.xml-sitemaps.com/validate-xml-sitemap.html),
           убедитесь, что он отдаётся с кодом 200 и `Content-Type: application/xml`,

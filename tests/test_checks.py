@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import httpx
 
-from conftest import html
+from conftest import OFFLINE, html
 from seoaudit.core import robots_txt
 from seoaudit.core.config import AuditConfig
 from seoaudit.core.engine import Auditor
 from seoaudit.core.models import AuditReport, RuleStatus
 
 SITE = "https://site.test"
-OFFLINE = {"checks": {"pagespeed": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}}
 TEXT = " ".join(f"слово{i}" for i in range(80))
 HTML = {"content-type": "text/html; charset=utf-8"}
 
@@ -23,7 +22,7 @@ def audit(pages: dict, fallback: tuple[int, dict, bytes] | None = None, **config
         if request.url.host != "site.test":
             return httpx.Response(404)
         entry = pages.get(request.url.raw_path.decode()) or fallback or (404, HTML, b"<h1>404</h1>")
-        status, headers, body = entry
+        status, headers, body = entry(request) if callable(entry) else entry
         return httpx.Response(status, headers=headers, content=b"" if request.method == "HEAD" else body)
 
     cfg = AuditConfig.model_validate({**OFFLINE, **config})
@@ -209,7 +208,8 @@ def test_sitemap_coverage_and_hreflang_targets():
                 f'<h1>Home</h1><p>{TEXT}</p><a href="/about">О компании</a>',
                 f'<link rel="alternate" hreflang="ru" href="{SITE}/"><link rel="alternate" hreflang="en" href="{SITE}/en">',
             ),
-            "/about": page("About", f'<h1>About</h1><p>{TEXT}</p><a href="/">Главная</a>'),
+            "/about": page("About", f'<h1>About</h1><p>{TEXT}</p><a href="/">Главная</a> <a href="/news/page/2/">Ещё</a>'),
+            "/news/page/2/": page("News 2", f"<h1>News</h1><p>{TEXT}</p>"),
             "/en": page("En", "<h1>En</h1>", '<meta name="robots" content="noindex">'),
         }
     )
@@ -292,7 +292,7 @@ def test_structured_data_values():
     ]</script>"""
     report = audit({"/": page("Home", f"<h1>Home</h1><p>{TEXT}</p>", jsonld)}, crawl={"use_sitemap": False})
     keys = {f.key for f in rule(report, "structured_data.schema_values").findings}
-    assert keys == {"url", "price", "currency", "date", "breadcrumb"}
+    assert keys == {"url", "price", "currency", "date", "breadcrumb_name"}
     missing = [f.data["missing"] for f in rule(report, "structured_data.schema_required").findings]
     assert ["ratingCount/reviewCount"] in missing
 
@@ -339,8 +339,142 @@ def test_structured_data_vocabulary():
     assert [f.data["type"] for f in rule(report, "structured_data.rich_result_retired").findings] == ["HowTo", "SearchAction"]
 
 
+def test_bots_access_cloaking_and_llms_txt():
+    robots = "User-agent: *\nAllow: /\n\nUser-agent: GPTBot\nUser-agent: PerplexityBot\nDisallow: /\n"
+    spam = '<a href="https://casino.example/">Казино</a> <a href="https://pills.example/">Таблетки</a>'
+
+    def home(request: httpx.Request) -> tuple[int, dict, bytes]:
+        agent = request.headers["user-agent"]
+        if "ClaudeBot" in agent or "OAI-SearchBot" in agent:
+            return 403, HTML, b"Forbidden"
+        body = f'<h1>Home</h1><p>{TEXT} {TEXT}</p><a href="/premium">Платная статья</a>'
+        return page("Home", body + (spam if "Googlebot" in agent else ""))
+
+    def premium(request: httpx.Request) -> tuple[int, dict, bytes]:
+        paywall = '<script type="application/ld+json">{"@type": "NewsArticle", "isAccessibleForFree": false}</script>'
+        full = f"<p>{TEXT * 3}</p>{spam}" if "Googlebot" in request.headers["user-agent"] else ""
+        return page("Premium", f"<h1>Premium</h1><p>{TEXT} {TEXT}</p>{full}", paywall)
+
+    report = audit(
+        {
+            "/": home,
+            "/premium": premium,
+            "/robots.txt": (200, {"content-type": "text/plain"}, robots.encode()),
+            "/llms.txt": (200, {"content-type": "text/plain"}, b"Site\n\n- [Docs](/docs)\n- [Home](/)\n"),
+        },
+        crawl={"use_sitemap": False},
+    )
+    messages = lambda rule_id: sorted(f.message for f in rule(report, rule_id).findings)  # noqa: E731
+    assert messages("bots.ai_search_blocked") == ["OAI-SearchBot: сервер отвечает 403", "PerplexityBot: запрещён в robots.txt"]
+    assert messages("bots.ai_training_blocked") == ["ClaudeBot (сервер: 403)", "GPTBot (robots.txt)"]
+    assert rule(report, "bots.search_bot_denied").status == RuleStatus.PASSED
+    assert [(f.key, f.data["hosts"]) for f in rule(report, "bots.cloaking").findings] == [
+        ("links", ["casino.example", "pills.example"])
+    ]
+    assert {f.key for f in rule(report, "bots.llms_txt_invalid").findings} == {"no_title", "broken"}
+    assert rule(report, "bots.llms_txt_missing").status == RuleStatus.PASSED
+
+
+def test_rendered_dom_is_compared_with_raw_html(monkeypatch):
+    from seoaudit.checks import rendering
+
+    body = f"<h1>Home</h1><p>{TEXT}</p>"
+    added = (
+        f"<p>{TEXT} {TEXT}</p>"
+        '<a href="/a">Раздел A</a> <a href="/b">Раздел B</a> <a href="/c">Раздел C</a>'
+        '<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Product", "name": "X"}</script>'
+    )
+    dom = html("Real title", body + added, f'<link rel="canonical" href="{SITE}/other">')
+
+    async def fake_render(urls, user_agent, locale, mobile, options):
+        return {url: rendering.Rendered(url, dom) for url in urls}
+
+    monkeypatch.setattr(rendering, "render", fake_render)
+    report = audit(
+        {"/": page("App", body, f'<link rel="canonical" href="{SITE}/">')},
+        crawl={"use_sitemap": False},
+        checks={"pagespeed": {"enabled": False}, "html": {"options": {"validator_pages": 0}}},
+    )
+    messages = lambda rule_id: [f.message for f in rule(report, rule_id).findings]  # noqa: E731
+    assert messages("rendering.js_indexing_changed") == [f"Canonical в HTML: {SITE}/, после JS: {SITE}/other"]
+    assert messages("rendering.js_meta_changed") == ["Title в HTML: «App», после JS: «Real title»"]
+    assert messages("rendering.js_content") == ["Слов в HTML: 81, после JS: 247"]
+    assert rule(report, "rendering.js_links").findings[0].data["count"] == 3
+    assert rule(report, "rendering.js_structured_data").findings[0].data["types"] == ["Product"]
+
+
 def test_title_width_is_measured_in_pixels():
     wide = "Широкий заголовок ЖШЩЮ для проверки ширины сниппета"
     report = audit({"/": page(wide, f"<h1>Home</h1><p>{TEXT}</p>")}, crawl={"use_sitemap": False})
     finding = rule(report, "meta.title_length").findings[0]
     assert finding.key == "long" and finding.data["width"] > 561 and finding.data["length"] < 60
+
+
+def test_geo_signals():
+    article_ld = '<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "A"}</script>'
+    organization = (
+        '<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization",'
+        f' "name": "Site", "url": "{SITE}/"}}</script>'
+    )
+    long_text = " ".join(f"слово{i}" for i in range(900))
+    entries = "".join(f"<url><loc>{SITE}/p{i}</loc><lastmod>2026-01-05</lastmod></url>" for i in range(25))
+    sitemap = f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}<url><loc>{SITE}/</loc><lastmod>2099-01-01</lastmod></url></urlset>'
+    report = audit(
+        {
+            "/": page("Home", f'<h1>Home</h1><p>{TEXT}</p><a href="/blog/post">Статья</a> <a href="/contacts">Контакты</a>', organization),
+            "/blog/post": page("Post", f"<h1>Post</h1><p>{long_text}</p>", article_ld + '<meta name="robots" content="max-snippet:20">'),
+            "/contacts": (200, {**HTML, "x-robots-tag": "bingbot: noarchive"}, html("Contacts", f"<h1>Contacts</h1><p>{TEXT}</p>").encode()),
+            "/sitemap.xml": (200, {"content-type": "application/xml"}, sitemap.encode()),
+        }
+    )
+    assert failed(report, "geo.author_missing") == {f"{SITE}/blog/post": None}
+    assert failed(report, "geo.date_missing") == {f"{SITE}/blog/post": None}
+    assert {(f.url, f.key) for f in rule(report, "geo.snippet_restricted").findings} == {
+        (f"{SITE}/blog/post", "max_snippet"),
+        (f"{SITE}/contacts", "bing"),
+    }
+    assert {f.key for f in rule(report, "geo.trust_pages_missing").findings} == {"about", "privacy"}
+    assert {f.key for f in rule(report, "geo.sitemap_lastmod").findings} == {"future"}
+    assert failed(report, "geo.unstructured_text") == {f"{SITE}/blog/post": None}
+    assert rule(report, "structured_data.organization_same_as").status == RuleStatus.FAILED
+    assert {r.category for r in report.rules() if r.id.startswith(("geo.", "bots.llms"))} == {"geo"}
+
+
+def test_report_language():
+    pages = {"/": page("Home", f"<p>{TEXT}</p>")}
+    english = audit(pages, lang="en", crawl={"use_sitemap": False})
+    assert rule(english, "content.h1_missing").title == "Missing H1 heading"
+    assert next(c for c in english.categories if c.id == "content").name == "Content & headings"
+
+    russian = audit(pages, crawl={"use_sitemap": False})
+    translated = Auditor(AuditConfig.model_validate({**OFFLINE, "lang": "en"})).localize(russian)
+    assert translated.lang == "en"
+    assert rule(translated, "content.h1_missing").title == "Missing H1 heading"
+
+
+def test_rules_are_translated():
+    def shape(text):
+        message = text.message if isinstance(text.message, dict) else {"default": text.message}
+        return {k for k, v in message.items() if v}, bool(text.recommendation), bool(text.fix)
+
+    for plan in Auditor(AuditConfig()).plan():
+        assert set(plan.definition.terms.get("ru", {})) == set(plan.definition.terms.get("en", {})), plan.cls.id
+        for spec in plan.rules.values():
+            assert {"ru", "en"} <= set(spec.text), spec.id
+            assert shape(spec.text["ru"]) == shape(spec.text["en"]), spec.id
+
+
+def test_og_article_needs_body_text():
+    og = '<meta property="og:type" content="article">'
+    paragraph = "<p>" + " ".join(f"слово{i}" for i in range(40)) + "</p>"
+    listing = page("Blog", "<h1>Blog</h1>" + "<p>Короткий анонс.</p>" * 10, og)
+    report = audit(
+        {
+            "/": page("Home", f'<h1>Home</h1><p>{TEXT}</p><a href="/blog">Блог</a> <a href="/post">Статья</a>', og),
+            "/blog": listing,
+            "/post": page("Post", '<h1>Post</h1><span class="post__author">Автор</span>' + paragraph * 6, og),
+        },
+        crawl={"use_sitemap": False},
+    )
+    assert failed(report, "geo.date_missing") == {f"{SITE}/post": None}
+    assert rule(report, "geo.author_missing").status == RuleStatus.PASSED

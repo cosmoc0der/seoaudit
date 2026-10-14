@@ -39,6 +39,14 @@ class AuditContext:
     def page_count(self) -> int:
         return sum(1 for _ in self.html_pages())
 
+    def key_pages(self, limit: int) -> list[str]:
+        """The home page and the most linked-to pages: a sample for checks too slow to run on every page."""
+        home = self.site.base_url
+        others = sorted(
+            (p for p in self.html_pages() if p.url != home), key=lambda p: len(self.inlinks.get(p.url, [])), reverse=True
+        )
+        return [home, *(p.url for p in others[: limit - 1])][:limit]
+
     async def fetch_page(self, url: str) -> Page:
         """A page outside the crawl, parsed as the crawler would; only indexability data is kept."""
         response = await fetch(self.client, url)

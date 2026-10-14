@@ -1,0 +1,486 @@
+rules:
+  robots_missing:
+    title: No robots.txt file
+    description: >-
+      robots.txt controls crawling: it closes utility sections and points to the sitemap. Without it, search
+      engines crawl everything; for large sites that means extra load and wasted crawl budget.
+    recommendation: Create robots.txt in the site root.
+    fix: |
+      The file must be served at `/robots.txt` with status 200 and `Content-Type: text/plain`:
+      ```text
+      User-agent: *
+      Disallow: /admin/
+      Disallow: /cart/
+      Disallow: /*?sort=
+      Disallow: /search
+
+      Sitemap: https://example.com/sitemap.xml
+      ```
+
+  robots_error:
+    title: robots.txt returns a server error
+    description: >-
+      If robots.txt answers 5xx or does not answer at all, Google treats the whole site as closed to crawling
+      and stops crawling it.
+    recommendation: Make /robots.txt reliably answer 200 (or 404 if there is no file).
+    message: "Response: $status"
+    fix: |
+      Check the web server and CMS configuration: robots.txt should be served as a static file with no
+      backend dependencies. For nginx:
+      ```nginx
+      location = /robots.txt { root /var/www/site; access_log off; }
+      ```
+
+  robots_blocks_all:
+    title: robots.txt disallows crawling the home page
+    description: The home page is closed to the search crawler; the site will drop out of search results.
+    recommendation: Remove the disallow rule for the home page and the main sections.
+    message: "Crawling disallowed for $agent"
+    fix: |
+      Find a rule like this in robots.txt:
+      ```text
+      User-agent: *
+      Disallow: /
+      ```
+      It is often left over from development on a staging domain. Replace it with targeted disallows for
+      utility sections. Check the result in Google Search Console → Settings → robots.txt
+      and in Yandex Webmaster → Tools → robots.txt analysis.
+
+  robots_no_sitemap:
+    title: robots.txt does not list a Sitemap
+    description: The Sitemap directive helps every search engine find the sitemap faster.
+    recommendation: Add a Sitemap directive with an absolute URL.
+    fix: |
+      At the end of robots.txt:
+      ```text
+      Sitemap: https://example.com/sitemap.xml
+      ```
+
+  sitemap_missing:
+    title: sitemap.xml not found
+    description: A sitemap speeds up discovery and recrawling of pages, especially deep and new ones.
+    recommendation: Generate sitemap.xml and submit it to search engines.
+    fix: |
+      1. Set up automatic sitemap generation (a CMS plugin or a scheduled script).
+      2. Include only canonical indexable URLs with status 200.
+      3. Up to 50,000 URLs / 50 MB per file; above that, use a sitemap index.
+      4. Reference the sitemap in robots.txt and submit it to Google Search Console and Yandex Webmaster.
+      ```xml
+      <?xml version="1.0" encoding="UTF-8"?>
+      <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+        <url><loc>https://example.com/section/page/</loc><lastmod>2026-01-15</lastmod></url>
+      </urlset>
+      ```
+
+  sitemap_invalid:
+    title: Sitemap error
+    description: The sitemap does not load or contains invalid XML; the search engine cannot process it.
+    recommendation: Fix the sitemap's availability and syntax.
+    message:
+      http: "The file is unavailable, response: $error"
+      html: "An HTML page is served instead of XML ($error)"
+      parse: "Invalid XML: line $line, column $col"
+      parse_structure: "Invalid XML: the file structure is broken"
+    fix: |
+      Check the file with a validator (for example, https://www.xml-sitemaps.com/validate-xml-sitemap.html),
+      make sure it is served with status 200 and `Content-Type: application/xml`, and that there is no
+      whitespace or BOM before `<?xml`. The sitemap must not redirect to other pages (login, placeholders):
+      the search engine would get HTML instead of XML.
+      Remove Sitemap directives in robots.txt that point to files that do not exist.
+
+  sitemap_bad_urls:
+    title: Sitemap contains non-canonical or unavailable URLs
+    description: >-
+      The sitemap should list only indexable pages with status 200. Junk URLs lower the search engine's trust
+      in the sitemap and waste crawl budget.
+    recommendation: Remove redirects, errors, noindex, non-canonical and robots.txt-blocked pages from the sitemap.
+    message:
+      error: "Response: $status"
+      redirect: "Redirects to $target"
+      noindex: "The page is noindex"
+      canonical: "Canonical points to $target"
+      blocked: "Blocked from crawling in robots.txt"
+    fix: |
+      Add a filter to the sitemap generator: only pages with status 200, without noindex,
+      not blocked in robots.txt, whose canonical matches their own URL.
+      For redirects, list the final URL.
+
+  home_noindex:
+    title: The home page is noindex
+    description: The home page is closed to indexing; it will not appear in search.
+    recommendation: Remove noindex from the home page immediately.
+    message: "Source: $source"
+    fix: |
+      Remove `<meta name="robots" content="noindex">` from the home page template or the
+      `X-Robots-Tag: noindex` header from the server configuration. In WordPress, check
+      Settings → Reading → "Discourage search engines from indexing this site".
+
+  noindex:
+    title: Pages closed to indexing (noindex)
+    description: >-
+      These pages will not get into the index. That is normal for utility sections, but check that no
+      important landing pages are among them.
+    recommendation: Review the list and remove noindex from target pages.
+    message: "Source: $source"
+    fix: |
+      If the page should be indexed, remove `noindex` from meta robots or the `X-Robots-Tag` header.
+      Do not block noindex pages in robots.txt at the same time, or the crawler will not see the directive.
+
+  canonical_missing:
+    title: No canonical specified
+    description: >-
+      Without a canonical, the search engine picks the main version among duplicates (UTM tags, sorting,
+      slashes) on its own, which dilutes ranking signals.
+    recommendation: Add a self-referencing canonical to every indexable page.
+    fix: |
+      ```html
+      <link rel="canonical" href="https://example.com/section/page/">
+      ```
+      The URL is absolute and matches the page address without tracking parameters.
+      For duplicate pages, point to the main page.
+
+  canonical_multiple:
+    title: Several different canonicals on a page
+    description: When canonicals conflict, search engines ignore all of them.
+    recommendation: Keep exactly one canonical.
+    message: "Values: $values"
+    fix: |
+      The second canonical is usually added by an SEO plugin or a third-party script. Find the source and
+      switch off the duplicate output. Check the `Link: <...>; rel="canonical"` HTTP header as well.
+
+  canonical_non_self:
+    title: Canonical points to another page
+    description: >-
+      The page declares another page as the main one and will most likely not be indexed. Make sure this
+      is intentional.
+    recommendation: Check that canonicals to other URLs are set only on duplicates.
+    message: "Canonical → $target"
+    fix: |
+      If the page is unique, set the canonical to its own URL.
+      A common mistake is a canonical to the first pagination page or to the home page on every page.
+
+  canonical_broken:
+    title: Canonical points to an unavailable or redirecting URL
+    description: Search engines ignore a canonical that points to an error or a redirect.
+    recommendation: Put the final URL that answers 200 in the canonical.
+    message:
+      error: "$target answers: $status"
+      redirect: "$target redirects"
+    fix: |
+      Compare the canonical URL format with the real address: protocol (https), www, trailing slash,
+      letter case. The canonical must point to a page that answers 200 without redirects.
+
+  redirect_chain:
+    title: Redirect chains
+    description: >-
+      Each extra redirect slows down loading and crawling; Googlebot follows at most 10 hops in a row, and long
+      chains break more often.
+    recommendation: Redirect from the original URL to the final one in a single step.
+    message: "Redirects: $hops — $chain"
+    fix: |
+      A typical chain: `http://example.com` → `https://example.com` → `https://www.example.com` → `/home/`.
+      Combine the rules so that any variant leads straight to the canonical URL. nginx:
+      ```nginx
+      server {
+        listen 80;
+        server_name example.com www.example.com;
+        return 301 https://www.example.com$request_uri;
+      }
+      ```
+      Also update internal links so they point straight to the final addresses.
+
+  redirect_temporary:
+    title: Temporary redirects (302/307)
+    description: >-
+      A temporary redirect tells the search engine the old address will come back, so the old URL may stay
+      in the index instead of the new one.
+    recommendation: Use 301 or 308 for permanent moves.
+    message: "$status → $target"
+    fix: |
+      Change the redirect code to 301 in the server or application configuration:
+      ```nginx
+      return 301 https://example.com/new-url;
+      ```
+      ```python
+      return redirect(url, code=301)  # Flask; Django: HttpResponsePermanentRedirect
+      ```
+
+  blocked_by_robots:
+    title: Links to pages blocked in robots.txt
+    description: Internal links lead to these URLs, but robots.txt disallows crawling them.
+    recommendation: Check that only utility sections are blocked.
+    message: "Inbound links: $inlinks"
+    fix: |
+      If the page should be in search, remove the Disallow rule. If not, remove the links to it from the
+      templates. Note: a URL blocked in robots.txt can get into the index without content if it has links;
+      to keep it out of search, allow crawling and add noindex.
+
+  orphan_pages:
+    title: Orphan pages
+    description: >-
+      The pages are in the sitemap but have no internal links. Search engines consider them unimportant,
+      and they rank poorly.
+    recommendation: Link to these pages from menus, categories or related content.
+    fix: |
+      Build the pages into the site structure: catalogs, breadcrumbs, "similar products" and "read also"
+      blocks. If a page is not needed, remove it from the sitemap.
+
+  deep_pages:
+    title: Pages buried too deep
+    description: >-
+      The page is more than $max_depth clicks from the home page. The deeper a page is, the less often it
+      is crawled and the less weight it gets.
+    recommendation: Shorten the path to important pages to $max_depth clicks.
+    message: "Clicks from the home page: $depth"
+    fix: |
+      Link deep sections from the menu, footer, breadcrumbs and an HTML sitemap.
+      For catalogs, show more products per page or use filters instead of long pagination.
+
+  host_duplicate:
+    title: The site is available with and without www
+    description: Both versions answer 200 without a redirect; the search engine sees two identical sites.
+    recommendation: Set up a 301 redirect to the main mirror.
+    message: "Duplicate without a redirect, main: $main"
+    fix: |
+      nginx:
+      ```nginx
+      server {
+        listen 443 ssl;
+        server_name www.example.com;
+        return 301 https://example.com$request_uri;
+      }
+      ```
+      Apache (.htaccess):
+      ```apache
+      RewriteEngine On
+      RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+      RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+      ```
+
+  home_unavailable:
+    title: The home page returns an error
+    description: >-
+      The home page is the crawlers' entry point and the strongest page of the site. If it does not answer
+      200, Yandex treats it as a fatal site issue, and the page itself eventually drops out of the index.
+    recommendation: Make the home page reliably answer 200.
+    message: "Response: $status"
+    fix: |
+      1. Check the web server and application logs at the time of the request to `/`.
+      2. A 403 usually comes from WAF or anti-bot rules: allow search crawlers.
+      3. A 503 is acceptable only during maintenance and with a `Retry-After` header.
+
+  soft_404_setup:
+    title: Non-existent pages do not return 404
+    description: >-
+      The server answers 200 for an address that does not exist on the site. Typos in links and junk URLs
+      turn into empty duplicate pages, and crawl budget is wasted. Yandex Webmaster reports this as
+      "Incorrect handling of non-existent pages".
+    recommendation: Return 404 or 410 for any address that does not exist.
+    message:
+      default: "A non-existent address answers 200"
+      redirect: "A non-existent address redirects to $target, which answers 200"
+    fix: |
+      - The last route in the application router must be a handler that serves the error page with status
+        404, not 200.
+      - SPA (React, Vue): a fallback to `index.html` with status 200 for any path is the source of the issue.
+        Unknown routes must get status 404 from the server or SSR.
+      - Do not redirect non-existent addresses to the home page: Google treats such redirects as soft 404.
+      nginx:
+      ```nginx
+      location / { try_files $uri $uri/ =404; }
+      error_page 404 /404.html;
+      ```
+
+  robots_syntax:
+    title: Errors in robots.txt
+    description: >-
+      Lines that search engines do not understand are silently ignored, so disallows and allows do not work
+      as intended.
+    recommendation: Fix the listed robots.txt lines.
+    message:
+      syntax: "Lines not in the “directive: value” format ($count lines): $lines"
+      unknown: "Unsupported directives ($count lines): $lines"
+      no_agent: "Allow/Disallow before the first User-agent directive ($count lines): $lines"
+      sitemap: "Sitemap given as a relative address ($count lines): $lines"
+      non_ascii: "Cyrillic or other non-ASCII characters ($count lines): $lines"
+      too_large: "File size: $size_kb KB, the limit is 500 KB"
+    fix: |
+      - Each rule goes on its own line as `Directive: value`; Allow and Disallow come after `User-agent`.
+      - Directives like `Noindex:` or `Request-rate:` are supported by neither Google nor Yandex; remove them.
+        Indexing is blocked with meta robots on the page itself.
+      - Give the Sitemap as an absolute URL: `Sitemap: https://example.com/sitemap.xml`.
+      - Yandex does not accept Cyrillic: write the domain in punycode and paths URL-encoded.
+      - Google reads only the first 500 KiB of the file; Yandex treats a file over 500 KB as fully allowing.
+
+  blocked_resources:
+    title: CSS, JS or images blocked in robots.txt
+    description: >-
+      Googlebot renders pages like a browser. If styles or scripts are disallowed in robots.txt, it sees the
+      page broken: some content and links disappear, and the mobile layout is not recognized.
+    recommendation: Allow crawling of the files needed to render pages.
+    message: "Pages using the file: $pages ($examples)"
+    fix: |
+      Find the Disallow rule that matches the file and add an allow rule for static files. The Allow rule
+      must be longer than the disallowing one: on conflict Google applies the longest match.
+      ```text
+      User-agent: *
+      Disallow: /assets/
+      Allow: /assets/*.css
+      Allow: /assets/*.js
+      ```
+      Check the result in Search Console: URL Inspection → View crawled page.
+
+  canonical_target_non_indexable:
+    title: Canonical points to a non-indexable page
+    description: >-
+      Pages pass their signals to the canonical URL, but it is closed to indexing itself or points further.
+      The search engine ignores such a hint and picks the main version on its own.
+    recommendation: Put the final indexable page in the canonical.
+    message:
+      noindex: "The target page is noindex. Pages with this canonical: $pages ($examples)"
+      chain: "Chain: the target page's canonical points to $final. Pages with this canonical: $pages ($examples)"
+      loop: "Loop: the target page's canonical points back to $final"
+      blocked: "The target page is blocked in robots.txt. Pages with this canonical: $pages ($examples)"
+    fix: |
+      - noindex: remove noindex from the target page or point the canonical to an indexable one.
+      - Chain: point straight to the final URL (A → C, not A → B → C).
+      - Loop: choose the main page; it gets a canonical to itself, the duplicates point to it.
+      - robots.txt: allow crawling of the target page, otherwise the crawler cannot see its content.
+
+  not_in_sitemap:
+    title: Indexable pages missing from the sitemap
+    description: >-
+      The sitemap is the list of pages you want in search. Search engines discover and recrawl pages outside
+      it more slowly.
+    recommendation: Add every indexable page to the sitemap.
+    fix: |
+      Generate the sitemap automatically from the same database as the site (a CMS plugin or a scheduled
+      script). It should include every page with status 200, without noindex and with a self canonical.
+      If a page should not be in search, close it with noindex or point its canonical to the main page.
+
+  redirect_https_to_http:
+    title: Redirect from HTTPS to HTTP
+    description: >-
+      A redirect from the secure version to the insecure one: the browser shows a warning, and the search
+      engine gets conflicting signals about the site's main mirror.
+    recommendation: Redirect only to HTTPS addresses.
+    message: "Redirects to $target"
+    fix: |
+      Find the rule that puts `http://` into the `Location` header: an absolute URL in the CMS settings,
+      an outdated .htaccess rule, or an application behind a proxy that does not know the original protocol
+      (pass and honor `X-Forwarded-Proto`). Check: `curl -I https://example.com/page`.
+
+  search_pages_indexable:
+    title: Site search pages are open to indexing
+    description: >-
+      Internal search results are an endless set of similar low-value pages. Google advises against spending
+      crawl budget on them, and Yandex classifies such pages as low value.
+    recommendation: Close search results from indexing.
+    fix: |
+      Add to the search results template:
+      ```html
+      <meta name="robots" content="noindex, follow">
+      ```
+      Or disallow crawling in robots.txt (`Disallow: /search`, `Disallow: /*?q=`), but not both at once:
+      the crawler cannot read a page blocked in robots.txt and will not see the noindex.
+      Do not link to search results from menus and tag clouds; link to categories instead.
+
+  url_variants_duplicate:
+    title: Pages available at several addresses
+    description: >-
+      The same content opens with and without a trailing slash, in a different letter case or via index.php,
+      with no redirect or canonical. For search engines these are separate duplicate pages that split weight.
+    recommendation: Set up a 301 redirect from the address variants to the main URL.
+    message:
+      slash: "Opens both with and without a slash; main address $original, duplicates among checked: $count"
+      case: "Opens in a different letter case; main address $original, duplicates among checked: $count"
+      index: "The home page is available via an index file; main address $original"
+    fix: |
+      nginx:
+      ```nginx
+      # one address form, with a trailing slash
+      rewrite ^([^.]*[^/])$ $1/ permanent;
+      # /index.php and /index.html → /
+      if ($request_uri ~* "^/index\.(php|html)$") { return 301 /; }
+      ```
+      Lowercasing is set up in the application (a 301 to `path.lower()`).
+      If a redirect is not possible, output `<link rel="canonical">` to the main address on all variants.
+
+  canonical_invalid:
+    title: Invalid canonical
+    description: >-
+      A canonical the search engine cannot accept: it sits outside `<head>`, is empty, has a fragment, points
+      to the HTTP version of an HTTPS site, or points to the home page en masse. Such a hint is ignored, or it
+      merges pages that should rank on their own into the home page.
+    recommendation: Output one absolute canonical in `<head>` pointing to the page's final HTTPS address.
+    message:
+      outside_head: "Canonical outside <head>, Google ignores it: $value"
+      empty: "Empty or invalid address: $value"
+      fragment: "Address with a fragment (#): $value"
+      http: "Points to the HTTP version: $value"
+      homepage: "Different pages have a canonical to the home page. Pages with this canonical: $pages ($examples)"
+    fix: |
+      ```html
+      <head>
+        <link rel="canonical" href="https://example.com/section/page/">
+      </head>
+      ```
+      - The tag must be in `<head>`: scripts and widgets that insert it into `<body>` do not work.
+      - The address is absolute, on HTTPS, without `#` and without tracking parameters.
+      - Only real duplicates of the home page get a canonical to it; other pages get a canonical to themselves.
+
+  head_broken:
+    title: Invalid head — meta tags end up in body
+    description: >-
+      `<head>` contains an element that does not belong there. The parser closes `<head>` at it, and everything
+      below — canonical, meta robots, hreflang, title — ends up in `<body>`. Google ignores such tags.
+    recommendation: Remove elements not allowed in `<head>`, or move the meta tags above them.
+    message:
+      default: "<$tag> closes <head>; moved into <body>: $moved"
+      text: "Text inside <head> closes it; moved into <body>: $moved"
+      noscript_img: "<noscript> with an image (often an analytics pixel) closes <head>; moved into <body>: $moved"
+    fix: |
+      Only `title`, `meta`, `link`, `base`, `style`, `script`, `noscript` (without images inside) and
+      `template` are allowed in `<head>`. Common causes:
+      - analytics pixels (`<noscript><img ...></noscript>`): move them to the start of `<body>`;
+      - `<div>`, `<iframe>`, `<img>` inserted by a plugin or widget;
+      - stray text or an unclosed tag in the header template.
+      Put the SEO tags (title, description, canonical, robots, hreflang) at the very start of `<head>`.
+
+  robots_directives_conflict:
+    title: Conflicting indexing directives
+    description: >-
+      The page has opposite directives at once (in meta robots and the X-Robots-Tag header), or noindex
+      together with a canonical to another page. The search engine picks the strictest option, and the result
+      differs from what was intended.
+    recommendation: Keep one consistent directive per page.
+    message:
+      contradiction: "Specified at once: $value"
+      noindex_canonical: "noindex and a canonical to $target at once"
+    fix: |
+      - Check every source: `<meta name="robots">`, `<meta name="googlebot">` / `yandex` and the
+        `X-Robots-Tag` header in the server response; usually the CMS sets one and a plugin the other.
+      - For a duplicate keep only the canonical to the main page; for a page that does not belong in search,
+        keep only noindex.
+
+  sitemap_limits:
+    title: Sitemap exceeds limits or contains foreign addresses
+    description: >-
+      One sitemap file may hold at most 50,000 URLs and 50 MB uncompressed; addresses must use the same host
+      and protocol as the site. Violations mean the file or some of its addresses are not processed.
+    recommendation: Split a large sitemap into parts and keep only the site's HTTPS addresses in it.
+    message:
+      too_many_urls: "Addresses in the file: $count (the limit is 50,000)"
+      too_large: "File size: $size_mb MB (the limit is 50 MB)"
+      foreign: "Addresses of another domain or subdomain ($count addresses): $examples"
+      http: "HTTP addresses on an HTTPS site ($count addresses): $examples"
+    fix: |
+      - Split the sitemap into several files and join them with a sitemap index:
+        ```xml
+        <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+          <sitemap><loc>https://example.com/sitemap-1.xml</loc></sitemap>
+          <sitemap><loc>https://example.com/sitemap-2.xml</loc></sitemap>
+        </sitemapindex>
+        ```
+      - Generate addresses from the main domain setting with `https://`, not from the current request.
+      - Every subdomain needs its own sitemap.

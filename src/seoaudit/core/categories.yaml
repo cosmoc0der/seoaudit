@@ -62,6 +62,15 @@ mobile:
     en:
       name: Mobile
       description: Mobile rendering, the basis of mobile-first indexing.
+accessibility:
+  weight: 0.6
+  text:
+    ru:
+      name: Доступность
+      description: Удобство сайта для людей с ограничениями и для программ экранного доступа по данным Lighthouse.
+    en:
+      name: Accessibility
+      description: Usability for people with disabilities and screen readers, as measured by Lighthouse.
 security:
   weight: 1.0
   text:
@@ -71,6 +80,19 @@ security:
     en:
       name: Security
       description: HTTPS, certificate, security headers and exposed files.
+geo:
+  weight: 0.8
+  text:
+    ru:
+      name: "GEO: AI-поиск"
+      description: >-
+        Готовность сайта к генеративному поиску: ChatGPT, Perplexity, Claude, Copilot и AI-обзорам Google.
+        Доступ AI-роботов, текст без JavaScript, разрешение цитировать, сущность бренда, авторство и свежесть.
+    en:
+      name: "GEO: AI search"
+      description: >-
+        Readiness for generative search in ChatGPT, Perplexity, Claude, Copilot and Google AI Overviews:
+        AI crawler access, text without JavaScript, permission to quote, brand entity, authorship and freshness.
 html:
   weight: 0.6
   text:

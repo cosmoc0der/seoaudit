@@ -1,0 +1,158 @@
+rules:
+  h1_missing:
+    title: Missing H1 heading
+    description: H1 is the page's main heading, an important relevance signal for search engines and users.
+    recommendation: Add one H1 with the page's main key phrase.
+    fix: |
+      ```html
+      <h1>Page name</h1>
+      ```
+      A common mistake is the logo or site name in an H1 on every page, with the real heading in
+      `<div class="title">`. Make the logo a plain `<a>` and the content heading an H1.
+
+  h1_multiple:
+    title: Multiple H1 headings
+    description: Search engines accept several H1s, but one main heading makes the page structure clearer.
+    recommendation: Keep one H1 and turn the other headings into H2–H3.
+    message: "H1s on the page: $count ($values)"
+    fix: |
+      Check the header, footer and widget templates: they often use H1 for styling.
+      Set the visual style with CSS classes, not with the heading level.
+
+  heading_empty:
+    title: Empty H1 heading
+    description: The H1 tag is there but has no text (for example, only an image without alt).
+    recommendation: Add text to the H1.
+    fix: |
+      If the H1 holds only an image, add text and place the image separately,
+      or give the image a meaningful alt.
+
+  heading_hierarchy:
+    title: Broken heading hierarchy
+    description: >-
+      Skipped levels (for example, H2 → H4 without H3) confuse screen readers and make the markup harder
+      to maintain; the effect on rankings is small.
+    recommendation: Use headings in sequence without skipping levels.
+    message: "$prev is followed by $next: “$value”"
+    fix: |
+      The structure should nest like a table of contents:
+      ```text
+      H1 Page name
+        H2 Section
+          H3 Subsection
+        H2 Another section
+      ```
+
+  thin_content:
+    title: Thin content
+    description: >-
+      The page has fewer than $min_words words (menu and footer included). Volume itself is not a ranking
+      factor, but search engines treat pages without useful content as low value (thin content).
+    recommendation: Expand the content with information useful to the visitor.
+    message: "Words on the page: $words"
+    fix: |
+      Add unique descriptions, specifications, FAQs, reviews, instructions.
+      If the page is a utility page (cart, login), close it with `noindex`.
+      On product pages, show specifications as text, not as images.
+
+  text_ratio:
+    title: Low text-to-HTML ratio
+    description: >-
+      Visible text makes up less than $min_percent% of the HTML. This does not affect rankings, but it often
+      points to bloated markup, inline scripts and styles that slow down loading.
+    recommendation: Move inline CSS/JS to external files and simplify the markup.
+    message: "Text share: $ratio%"
+    fix: |
+      - Move large `<script>` and `<style>` blocks to external cacheable files.
+      - Take SVG sprites out of the HTML and load them as a file.
+      - Remove unnecessary `div` wrappers and unused markup.
+
+  placeholder_text:
+    title: Placeholder text on the page
+    description: Template filler text was left on the page; it looks unprofessional and hurts the site's quality.
+    recommendation: Replace placeholders with real content or close the pages from indexing.
+    message: "Found: $markers — “$context”"
+    fix: |
+      Find placeholders by searching the templates and the CMS database. Close unfinished pages with
+      `<meta name="robots" content="noindex">` until they are filled.
+
+  duplicate_content:
+    title: Exact duplicate content
+    description: The page's text fully matches other pages; the search engine will keep only one of them in the index.
+    recommendation: Remove duplicates with a 301 redirect, a canonical or unique content.
+    message:
+      default: "Also matches $count pages: $others"
+      copy: "Copy of $original"
+    fix: |
+      Typical sources of duplicates: URLs with and without a trailing slash, with `index.php`, sorting
+      parameters, print versions. Solutions:
+      1. A 301 redirect to the main URL if users do not need the duplicate.
+      2. `<link rel="canonical">` to the main page if the duplicate is needed (sorting, filters).
+      3. Unique content if the pages should rank for different queries.
+
+  near_duplicate:
+    title: Near-duplicate content
+    description: >-
+      The pages' texts almost match, differing only in small fragments. This is typical of template pages with
+      minimal differences (cities, product colors) that compete with each other.
+    recommendation: Make the content unique or merge similar pages.
+    message:
+      default: "Also similar to $count pages: $others"
+      copy: "Similar to $original"
+    fix: |
+      - For product variants (color, size): one product page with a variant selector, or a canonical to the main one.
+      - For regional pages: unique texts, addresses, reviews and case studies for each region.
+      - Shorten shared template text (site-wide blocks) and grow the unique part.
+
+  soft_404:
+    title: Empty and error pages returning 200
+    description: >-
+      The page answers 200, but its content is a "not found" error or an empty template: header and footer
+      without main content (an empty category, an archive with no posts). Google marks such pages as soft 404
+      and Yandex as low value; they waste crawl budget and lower the quality of the whole site.
+    recommendation: Return 404 for missing content, and fill empty sections or close them with noindex.
+    message:
+      not_found: "Error text in the heading: “$value”"
+      empty: "Almost no main content (words without header and footer: $words)"
+    fix: |
+      - The error page must be served with status 404, not 200; check the handler in the application.
+      - Empty categories, tags and archives: either fill them or output
+        `<meta name="robots" content="noindex, follow">` while the section has no posts,
+        and leave them out of the sitemap.
+      - In WordPress, unneeded taxonomies are switched off in the SEO plugin settings ("Show in search results: no").
+
+  js_rendered:
+    title: Content is built only by JavaScript
+    description: >-
+      The source HTML has almost no text or links; the page is assembled by scripts in the browser. Google
+      renders such pages with a delay and not always fully; Yandex and social networks often see an empty
+      page. The other checks of this audit are incomplete for such pages.
+    recommendation: Serve the main content and links in the server HTML (SSR or prerendering).
+    message: "Words in the source HTML: $words"
+    fix: |
+      - Enable server-side rendering: Next.js / Nuxt (SSR or SSG), Angular Universal, Vite SSR.
+      - If a rewrite is not possible, prerender static HTML versions of the pages at build time.
+      - Make links plain `<a href="/path">`, not onclick handlers: crawlers find pages through them.
+      Check: "View page source" (Ctrl+U) must contain text and links, not an empty `<div id="root">`.
+
+  param_duplicates:
+    title: Duplicate pages from URL parameters
+    description: >-
+      A URL with parameters (tracking tags, sorting, sessions) serves the same content as the main page and
+      is open for indexing. Yandex Webmaster flags this as a critical issue: the wrong version may get into
+      search, and ranking signals are split between the duplicates.
+    recommendation: Add a canonical to the main URL and list the parameters in Clean-param for Yandex.
+    message:
+      default: "Copy of $original (parameters: $params)"
+      clean_param: "Copy of $original (parameters: $params); Clean-param is set for Yandex, but Google needs a canonical"
+    fix: |
+      1. On pages with parameters, output a canonical to the URL without them:
+         ```html
+         <link rel="canonical" href="https://example.com/catalog/">
+         ```
+      2. For Yandex, list the insignificant parameters in robots.txt:
+         ```text
+         User-agent: Yandex
+         Clean-param: sort&utm_source&utm_medium /catalog/
+         ```
+      3. Do not link internally to URLs with tracking tags and sorting if they do not change the content.

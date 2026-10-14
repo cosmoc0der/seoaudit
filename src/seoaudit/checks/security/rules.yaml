@@ -1,5 +1,14 @@
 category: security
 
+terms:
+  ru:
+    expired: Срок действия сертификата истёк
+    not_yet_valid: Срок действия сертификата ещё не начался
+    wrong_host: Сертификат выпущен на другой домен
+    self_signed: Самоподписанный сертификат
+    missing_chain: Не установлена промежуточная цепочка сертификатов
+    untrusted: Браузеры не доверяют сертификату
+
 rules:
   https_missing:
     severity: critical

@@ -1,0 +1,61 @@
+rules:
+  too_long:
+    title: URLs too long
+    description: URLs longer than $max_length characters are harder to read and get cut off in results and when copied.
+    recommendation: Shorten the URLs, keeping the keywords.
+    message: "Length: $length characters"
+    fix: |
+      Remove stop words, repeated categories and ids from the URL:
+      `/catalog/category/section/subsection/page-name-2026-id12345` →
+      `/section/page-name/`. When changing URLs, set up 301 redirects from the old addresses.
+
+  uppercase:
+    title: Uppercase letters in URLs
+    description: URLs are case-sensitive — `/Page` and `/page` count as different pages, which creates duplicates.
+    recommendation: Use only lowercase letters and redirect uppercase variants.
+    fix: |
+      Generate friendly URLs in lowercase and add a 301 redirect from the old addresses.
+      This is easiest in the application router:
+      ```python
+      if request.path != request.path.lower():
+          return redirect(request.path.lower(), code=301)
+      ```
+
+  underscores:
+    title: Underscores in URLs
+    description: Google recommends hyphens to separate words; an underscore may not be recognized as a separator.
+    recommendation: Use hyphens instead of underscores for new pages.
+    fix: |
+      Change existing page URLs only together with a 301 redirect; a mass address change is not needed without
+      a clear reason, fixing the generation of new ones is enough.
+
+  double_slash:
+    title: Double slash in URLs
+    description: Addresses like `/catalog//item` signal a link generation bug and are a source of duplicates.
+    recommendation: Fix the link generation and redirect to the correct address.
+    fix: |
+      Find where paths are concatenated (`base + '/' + path` where base already ends with `/`).
+      nginx: `merge_slashes on;` (the default) plus a redirect to the normalized path in the application.
+
+  spaces:
+    title: Spaces in URLs
+    description: Spaces are encoded as `%20`; such URLs look ugly and often break when copied.
+    recommendation: Replace spaces with hyphens in friendly URLs.
+    fix: |
+      Use transliteration/slugify when generating addresses: `"Page Name"` → `page-name`.
+
+  query_params:
+    title: Indexable URLs with query parameters
+    description: >-
+      Pages with parameters (sorting, filters, sessions) are open to indexing and have a self canonical or none
+      at all, which breeds duplicates and wastes crawl budget.
+    recommendation: Add a canonical to the main URL or close the parameters from indexing.
+    message: "Parameters: $query"
+    fix: |
+      - Add `<link rel="canonical">` to the URL without parameters on such pages.
+      - For Yandex, use the `Clean-param` directive in robots.txt:
+      ```text
+      User-agent: Yandex
+      Clean-param: sort&order&utm_source
+      ```
+      - Move important filters (brand, category) to friendly URLs: `/section/brand/` instead of `?brand=brand`.

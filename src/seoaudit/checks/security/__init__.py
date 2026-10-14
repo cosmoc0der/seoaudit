@@ -20,13 +20,13 @@ _CSRF_COOKIE = re.compile(r"csrf|xsrf", re.I)
 # These leak as ordinary HTML pages; for the rest an HTML answer is a catch-all page, not the file.
 _HTML_LEAKS = {"/phpinfo.php", "/info.php", "/server-status"}
 _TLS_ERRORS = (
-    ("expired", "Срок действия сертификата истёк"),
-    ("not yet valid", "Срок действия сертификата ещё не начался"),
-    ("hostname mismatch", "Сертификат выпущен на другой домен"),
-    ("not valid for", "Сертификат выпущен на другой домен"),
-    ("self-signed", "Самоподписанный сертификат"),
-    ("self signed", "Самоподписанный сертификат"),
-    ("issuer", "Не установлена промежуточная цепочка сертификатов"),
+    ("expired", "expired"),
+    ("not yet valid", "not_yet_valid"),
+    ("hostname mismatch", "wrong_host"),
+    ("not valid for", "wrong_host"),
+    ("self-signed", "self_signed"),
+    ("self signed", "self_signed"),
+    ("issuer", "missing_chain"),
 )
 _DISCLOSURE_HEADERS = ("x-powered-by", "x-aspnet-version", "x-aspnetmvc-version")
 _HEADER_RULES = {
@@ -161,7 +161,7 @@ def _cookie_issues(raw: str, is_https: bool) -> tuple[str, list[str]]:
 def _tls_error(raw: str) -> str:
     """OpenSSL wording means nothing to the report's reader; the cause does."""
     lowered = raw.lower()
-    return next((text for marker, text in _TLS_ERRORS if marker in lowered), "Браузеры не доверяют сертификату")
+    return next((code for marker, code in _TLS_ERRORS if marker in lowered), "untrusted")
 
 
 def _cert_expiry(host: str, port: int, timeout: float) -> float:

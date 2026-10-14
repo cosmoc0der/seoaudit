@@ -15,6 +15,7 @@ from seoaudit.core.tools import cache_dir, run_process
 log = logging.getLogger(__name__)
 
 _PSI_API = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+CATEGORIES = ("performance", "seo", "accessibility", "best-practices")
 
 
 class LighthouseError(RuntimeError):
@@ -55,7 +56,7 @@ class PsiRunner:
         self.concurrency = concurrency
 
     async def run(self, url: str, strategy: str) -> Measurement:
-        params = [("url", url), ("strategy", strategy), ("locale", self._lang), ("category", "performance"), ("category", "seo")]
+        params = [("url", url), ("strategy", strategy), ("locale", self._lang), *(("category", c) for c in CATEGORIES)]
         if self._api_key:
             params.append(("key", self._api_key))
         try:
@@ -93,7 +94,7 @@ class LocalRunner:
             "--output=json",
             "--output-path=stdout",
             "--quiet",
-            "--only-categories=performance,seo",
+            f"--only-categories={','.join(CATEGORIES)}",
             f"--locale={self._lang}",
             f"--chrome-flags={self._chrome_flags}",
         ]

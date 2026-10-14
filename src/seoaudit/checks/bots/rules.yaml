@@ -1,0 +1,188 @@
+category: geo
+
+options:
+  sample_pages: 5        # pages fetched as a browser and as Googlebot for the cloaking comparison
+  browser_agent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36"
+  user_agents:
+    Googlebot: "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.7390.122 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    bingbot: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm) Chrome/141.0.0.0 Safari/537.36"
+    YandexBot: "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)"
+  # Other bots get this; firewall rules match the bot name in it.
+  user_agent_template: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; {agent}/1.0)"
+  # robots.txt tokens with no crawler of their own: Google and Apple crawl with their usual bots.
+  robots_only: [Google-Extended, Applebot-Extended]
+
+rules:
+  search_bot_denied:
+    severity: high
+    scope: site
+    category: indexability
+    params:
+      agents: [Googlebot, bingbot, YandexBot]
+    refs: [https://developers.google.com/search/docs/crawling-indexing/verifying-googlebot]
+    text:
+      ru:
+        title: Сервер не пускает поисковых роботов
+        description: >-
+          На запрос с User-Agent поискового робота сервер отвечает ошибкой или проверкой «я не робот», хотя
+          браузеру отдаёт страницу. Так обычно срабатывает защита от ботов (WAF, Cloudflare, DDoS-Guard).
+          Если она блокирует и настоящих роботов, сайт выпадет из поиска. Возможен и безопасный вариант:
+          сервер проверяет подлинность робота по IP-адресу и отклоняет только поддельных — тогда настоящий
+          робот проходит.
+        recommendation: Убедитесь, что защита пропускает проверенных поисковых роботов.
+        message:
+          server: "$agent: сервер отвечает $status"
+        fix: |
+          1. Проверьте, что видит настоящий Googlebot: Search Console → «Проверка URL» → «Проверить страницу
+             на сайте». Для Яндекса — Вебмастер → «Инструменты» → «Проверка ответа сервера».
+          2. Если робот получает ошибку — разрешите проверенных ботов в защите:
+             - Cloudflare: Security → Bots, правило WAF с условием `cf.client.bot` → Skip;
+             - собственный WAF или nginx: проверяйте робота обратным DNS-запросом (`googlebot.com`, `google.com`,
+               `search.msn.com`, `yandex.ru/net/com`), а не блокируйте по User-Agent.
+
+  cloaking:
+    severity: high
+    scope: site
+    category: indexability
+    params:
+      agent: Googlebot
+      min_words: 100        # pages with less text in the browser are JS apps, which may be prerendered for bots
+      max_text_ratio: 2
+      min_new_hosts: 2
+    refs:
+      - https://developers.google.com/search/docs/essentials/spam-policies#cloaking
+      - https://developers.google.com/search/docs/crawling-indexing/javascript/dynamic-rendering
+    text:
+      ru:
+        title: Googlebot получает не ту страницу, что посетитель
+        description: >-
+          Страница, запрошенная с User-Agent Googlebot, отличается от той, что видит браузер: другой ответ
+          сервера, title, description, canonical, meta robots, объём текста или внешние ссылки. Показ роботу другого
+          контента (клоакинг) — нарушение правил Google, за него сайт понижают или исключают из поиска.
+          Частая причина — взлом: вредоносный код показывает спам-ссылки только поисковикам, и владелец
+          их не видит. Каждое отличие подтверждено повторной загрузкой страницы браузером. Страницы
+          с объявленным в разметке платным доступом (`isAccessibleForFree: false`) по тексту и ссылкам
+          не сравниваются: Google разрешает показывать роботу полную версию.
+        recommendation: Отдавайте роботам и посетителям одинаковый контент; при подозрении на взлом проверьте сайт.
+        message:
+          status: "$agent получает ответ $bot, браузер — $browser"
+          title: "Title для $agent: «$bot», для браузера: «$browser»"
+          description: "Description для $agent: «$bot», для браузера: «$browser»"
+          canonical: "Canonical для $agent: $bot, для браузера: $browser"
+          robots: "Meta robots для $agent: «$bot», для браузера: «$browser»"
+          text: "$agent видит $bot слов, браузер — $browser"
+          links: "Внешние ссылки только для $agent ($count сайтов): $hosts"
+        fix: |
+          Сравните ответы вручную:
+          ```bash
+          curl -s -A "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" https://example.com/page > bot.html
+          curl -s https://example.com/page > browser.html
+          diff bot.html browser.html
+          ```
+          - **Спам-ссылки или чужой текст только для робота** — признак взлома. Ищите код, который проверяет
+            `HTTP_USER_AGENT` (`googlebot`, `bot`): в `.htaccess`, `index.php`, `functions.php` темы, плагинах
+            и `wp-config.php`. Смените пароли и обновите CMS. Search Console → «Проблемы безопасности».
+          - **Разные title или canonical** — проверьте плагины кэширования, A/B-тесты и пререндеринг: роботу
+            должна уходить та же версия, что и посетителю.
+          - **Динамический рендеринг** (отдельная HTML-версия для роботов) Google считает временным решением;
+            содержимое обязано совпадать с тем, что видит посетитель. Лучше перейти на SSR.
+
+  ai_search_blocked:
+    severity: high
+    scope: site
+    params:
+      # bingbot: Copilot answers from the Bing index, and ChatGPT search draws on it too.
+      agents: [OAI-SearchBot, ChatGPT-User, PerplexityBot, Perplexity-User, Claude-SearchBot, Claude-User,
+               DuckAssistBot, MistralAI-User, bingbot]
+    refs: [https://platform.openai.com/docs/bots, https://docs.perplexity.ai/guides/bots]
+    text:
+      ru:
+        title: AI-поисковики не могут читать сайт
+        description: >-
+          Роботам, через которых ChatGPT, Perplexity, Claude и другие ассистенты ищут ответы и ссылаются
+          на источники, закрыт доступ: запретом в robots.txt или защитой сервера от ботов. Сайт не попадёт
+          в ответы этих ассистентов и не получит с них переходы. Сюда же относится bingbot: Copilot отвечает
+          по индексу Bing, и ChatGPT тоже его использует. Это не роботы для обучения моделей —
+          их блокировка отдельный вопрос.
+        recommendation: Откройте доступ поисковым AI-роботам, если сайт хочет получать трафик из AI-ассистентов.
+        message:
+          robots: "$agent: запрещён в robots.txt"
+          server: "$agent: сервер отвечает $status"
+        fix: |
+          **robots.txt.** Разрешите поисковых роботов явно, даже если роботы для обучения запрещены:
+          ```text
+          User-agent: OAI-SearchBot
+          User-agent: ChatGPT-User
+          User-agent: PerplexityBot
+          User-agent: Claude-SearchBot
+          User-agent: Claude-User
+          Allow: /
+
+          User-agent: GPTBot
+          User-agent: ClaudeBot
+          Disallow: /
+          ```
+          **Защита сервера.** Cloudflare с 2025 года по умолчанию блокирует AI-роботов на новых доменах:
+          Security → Bots → «Block AI bots» / AI Crawl Control — разрешите нужных роботов. В собственном
+          WAF проверьте правила, блокирующие по User-Agent.
+
+  ai_training_blocked:
+    severity: info
+    scope: site
+    params:
+      agents: [GPTBot, ClaudeBot, Google-Extended, Applebot-Extended, CCBot, meta-externalagent, Bytespider, Amazonbot]
+    refs: [https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers]
+    text:
+      ru:
+        title: Роботы для обучения AI-моделей заблокированы
+        description: >-
+          Сайт запрещает роботам собирать тексты для обучения моделей. На обычный поиск и AI-ответы Google
+          это не влияет, на ответы ChatGPT и Claude — тоже, если их поисковые роботы открыты. Блокировать
+          или нет — решение владельца, это не ошибка.
+        message:
+          robots: "$agent (robots.txt)"
+          server: "$agent (сервер: $status)"
+
+  llms_txt_missing:
+    severity: info
+    scope: site
+    refs: [https://llmstxt.org/]
+    text:
+      ru:
+        title: Нет файла llms.txt
+        description: >-
+          llms.txt — краткое описание сайта со ссылками на главные разделы в формате Markdown для языковых
+          моделей. Это предложение, а не стандарт: Google его не использует, но его читают некоторые
+          AI-инструменты и ассистенты для разработчиков. Особенно полезен для документации и SaaS.
+        fix: |
+          Разместите файл по адресу `/llms.txt`:
+          ```markdown
+          # Название сайта
+
+          > Одно-два предложения: что это и для кого.
+
+          ## Основное
+          - [Тарифы](https://example.com/pricing): цены и условия
+          - [Документация](https://example.com/docs): установка и API
+          ```
+
+  llms_txt_invalid:
+    severity: low
+    scope: site
+    params:
+      max_probes: 30
+    refs: [https://llmstxt.org/]
+    text:
+      ru:
+        title: Ошибки в llms.txt
+        description: Файл llms.txt есть, но не соответствует формату или ведёт на несуществующие страницы.
+        recommendation: Исправьте файл по формату llmstxt.org.
+        message:
+          no_title: "Первая строка не заголовок «# Название»: «$value»"
+          no_links: "В файле нет ни одной ссылки в формате [название](URL)"
+          broken: "Битых ссылок: $count ($examples)"
+        fix: |
+          - Первая строка — заголовок первого уровня с названием сайта: `# Название`.
+          - Ссылки — в формате Markdown `[название](https://example.com/page)`, на существующие страницы
+            без редиректов.
+          - Обновляйте файл при изменении структуры сайта (удобно генерировать при сборке).

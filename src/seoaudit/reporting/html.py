@@ -143,7 +143,8 @@ def render_html(report: AuditReport, config: ReportConfig) -> str:
         status_chart=distribution([f"{p.status // 100}xx" if p.status else "—" for p in pages]),
         depth_chart=distribution([p.depth for p in pages if p.depth is not None], limit=6),
         problem_pages=[p for p in pages if p.status != 200],
-        slow_pages=sorted((p for p in pages if p.ttfb_ms), key=lambda p: -p.ttfb_ms)[:10],
+        # A redirect's entry carries the timing of its final page, which is listed on its own.
+        slow_pages=sorted((p for p in pages if p.ttfb_ms and p.status == 200), key=lambda p: -p.ttfb_ms)[:10],
     )
 
 

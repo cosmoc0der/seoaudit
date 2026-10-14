@@ -1,0 +1,144 @@
+rules:
+  ttfb_slow:
+    title: Slow server response (TTFB)
+    description: >-
+      Time to first byte exceeds $max_ms ms both during the crawl and on a repeated single request. A slow
+      server delays the whole page load and lowers how often crawlers visit.
+    recommendation: Bring TTFB down to $max_ms ms or less.
+    message:
+      default: "During the crawl: $crawl ms (not rechecked)"
+      rechecked: "During the crawl: $crawl ms, rechecked: $recheck ms"
+    fix: |
+      - Enable server-side page caching (FastCGI cache, Varnish, Redis, the CMS cache).
+      - Find slow SQL queries (slow query log) and add indexes.
+      - Enable OPcache (PHP) or application warm-up, and update the runtime version.
+      - Use a CDN that caches HTML for anonymous users.
+      - Check the hosting resources (CPU, RAM, I/O); a more powerful plan may be needed.
+
+  html_too_large:
+    title: HTML is too large
+    description: An HTML document over $max_kb KB takes longer to load and parse, especially on mobile.
+    recommendation: Reduce the HTML size to $max_kb KB.
+    message: "HTML size: $size_kb KB"
+    fix: |
+      Move inline scripts, styles and SVG to external files, remove embedded base64 images,
+      shrink the JSON state (`__NEXT_DATA__`, `window.__INITIAL_STATE__`),
+      and paginate long lists.
+
+  compression_missing:
+    title: HTML compression is not enabled
+    description: The server sends HTML without gzip/brotli, so 3–5 times more data is transferred.
+    recommendation: Enable brotli or gzip compression on the server.
+    message: "Uncompressed size: $size_kb KB"
+    fix: |
+      nginx:
+      ```nginx
+      gzip on;
+      gzip_comp_level 5;
+      gzip_types text/html text/css application/javascript application/json image/svg+xml;
+      # brotli (the ngx_brotli module):
+      brotli on;
+      brotli_types text/html text/css application/javascript application/json image/svg+xml;
+      ```
+      Apache: the `mod_deflate` / `mod_brotli` modules.
+
+  static_compression_missing:
+    title: Static files are served uncompressed
+    description: CSS, JS and SVG are served without gzip/brotli, which increases load time.
+    recommendation: Enable compression for text static files.
+    message: "Type: $type"
+    fix: |
+      Add the types to `gzip_types`/`brotli_types` (nginx) or enable compression on the CDN.
+      A frontend build can pre-generate `.br` and `.gz` versions with
+      `gzip_static on;` / `brotli_static on;`.
+
+  cache_missing:
+    title: Static files are not cached long enough
+    description: >-
+      Static resources are cached for less than 7 days ($min_seconds s) or not at all, so the browser
+      downloads them again on every visit.
+    recommendation: Set up long-term caching of static files with versioned file names.
+    message:
+      default: "Not cached (Cache-Control: $cache)"
+      short: "Cached for $hours h (Cache-Control: $cache)"
+    fix: |
+      nginx:
+      ```nginx
+      location ~* \.(css|js|woff2|webp|avif|jpg|png|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+      }
+      ```
+      Put a hash in file names (`app.3f9a1c.js`); bundlers (Vite, Webpack) do this automatically, so updates
+      do not get stuck in the cache.
+
+  render_blocking_scripts:
+    title: Render-blocking scripts in head
+    description: Scripts in `<head>` without async/defer block page rendering until they load and run.
+    recommendation: Add defer (or async for independent scripts), or move them to the end of body.
+    message: "Scripts: $count (for example: $examples)"
+    fix: |
+      ```html
+      <script src="/js/app.js" defer></script>      <!-- execution order is preserved -->
+      <script src="https://counter.example/tag.js" async></script>  <!-- independent analytics -->
+      ```
+
+  too_many_resources:
+    title: Too many JS/CSS files
+    description: More than $max_resources external scripts and styles on a page increase the number of requests and load time.
+    recommendation: Combine the files and reduce their number.
+    message: "JS/CSS files: $count"
+    fix: |
+      Bundle resources (Vite, Webpack, esbuild), remove unused libraries and plugins,
+      and load heavy widgets (chats, maps) only on interaction.
+
+  http2_missing:
+    title: The server does not support HTTP/2
+    description: HTTP/2 loads resources in parallel over one connection, speeding up page loads.
+    recommendation: Enable HTTP/2 (or HTTP/3) on the web server or CDN.
+    message: "Protocol: $version"
+    fix: |
+      nginx (1.25.1+):
+      ```nginx
+      server {
+        listen 443 ssl;
+        http2 on;
+      }
+      ```
+      For older nginx versions: `listen 443 ssl http2;`.
+
+  html_over_2mb:
+    title: HTML over $max_mb MB — Googlebot will truncate the page
+    description: >-
+      Googlebot fetches only the first $max_mb MB of an HTML file (uncompressed) and indexes the page as if
+      the rest did not exist: text, links and markup at the end of the document are lost.
+    recommendation: Reduce the HTML document below $max_mb MB.
+    message: "HTML size: $size_mb MB"
+    fix: |
+      - Move embedded data (SSR state JSON, base64 images, SVG sprites) to external files.
+      - Paginate long lists instead of one page with all items.
+      - Remove hidden duplicate blocks (mobile and desktop menus in two copies).
+
+  broken_resources:
+    title: Broken JS/CSS files
+    description: >-
+      A linked script or stylesheet is unavailable. The page displays and works with errors for users, and the
+      search engine may miss part of the content when rendering.
+    recommendation: Fix the file paths or remove references to resources that do not exist.
+    message: "Response: $status. Pages using the file: $pages ($examples)"
+    fix: |
+      - Check that the file was deployed: cached old HTML pages often reference a build with a different hash
+        in the file name. Keep the previous build's files until the cache refreshes.
+      - Fix the path in the template, or remove the reference if the resource is no longer needed.
+
+  site_slow_response:
+    title: Average server response time over $max_ms ms
+    description: >-
+      Yandex Webmaster flags such a site with the critical issue "Slow server response": the crawler visits
+      pages less often and more slowly, and users leave before the page loads.
+    recommendation: Bring the server response time down to 1 second or less.
+    message: "Average response time: $mean s (pages measured: $pages)"
+    fix: |
+      - Enable caching of ready pages (page cache, FastCGI cache, CDN cache) for anonymous visitors.
+      - Find slow database queries (slow query log) and add indexes.
+      - Check the server load: lack of CPU or memory on the hosting plan is a common cause.

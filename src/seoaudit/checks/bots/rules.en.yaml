@@ -1,0 +1,123 @@
+rules:
+  search_bot_denied:
+    title: The server blocks search engine crawlers
+    description: >-
+      A request with a search crawler's User-Agent gets an error or a "verify you are human" challenge, while
+      a browser gets the page. Bot protection (WAF, Cloudflare, DDoS-Guard) usually does this. If it also
+      blocks the real crawlers, the site drops out of search. There is a safe case too: the server verifies
+      crawlers by IP address and rejects only fake ones, and then the real crawler gets through.
+    recommendation: Make sure the protection lets verified search crawlers through.
+    message:
+      server: "$agent: the server answers $status"
+    fix: |
+      1. Check what the real Googlebot sees: Search Console → URL Inspection → Test live URL. For Yandex:
+         Webmaster → Tools → Server response check.
+      2. If the crawler gets an error, allow verified bots in the protection:
+         - Cloudflare: Security → Bots, a WAF rule with the `cf.client.bot` condition → Skip;
+         - your own WAF or nginx: verify crawlers with a reverse DNS lookup (`googlebot.com`, `google.com`,
+           `search.msn.com`, `yandex.ru/net/com`) instead of blocking by User-Agent.
+
+  cloaking:
+    title: Googlebot gets a different page than visitors
+    description: >-
+      The page requested with the Googlebot User-Agent differs from what a browser sees: a different server
+      answer, title, description, canonical, meta robots, amount of text or external links. Showing crawlers
+      different content (cloaking) violates Google's policies; sites are demoted or removed from search for it.
+      A common cause is a hack: malicious code shows spam links only to search engines, so the owner never
+      sees them. Every difference is confirmed by loading the page in a browser again. Pages that declare
+      paid access in their markup (`isAccessibleForFree: false`) are not compared by text and links: Google
+      allows serving the full version to its crawler.
+    recommendation: Serve crawlers and visitors the same content; if you suspect a hack, check the site.
+    message:
+      status: "$agent gets $bot, a browser gets $browser"
+      title: "Title for $agent: “$bot”, for a browser: “$browser”"
+      description: "Description for $agent: “$bot”, for a browser: “$browser”"
+      canonical: "Canonical for $agent: $bot, for a browser: $browser"
+      robots: "Meta robots for $agent: “$bot”, for a browser: “$browser”"
+      text: "$agent sees $bot words, a browser sees $browser"
+      links: "External links only for $agent ($count sites): $hosts"
+    fix: |
+      Compare the responses by hand:
+      ```bash
+      curl -s -A "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" https://example.com/page > bot.html
+      curl -s https://example.com/page > browser.html
+      diff bot.html browser.html
+      ```
+      - **Spam links or foreign text only for the crawler** is a sign of a hack. Look for code that checks
+        `HTTP_USER_AGENT` (`googlebot`, `bot`): in `.htaccess`, `index.php`, the theme's `functions.php`, plugins
+        and `wp-config.php`. Change passwords and update the CMS. Search Console → Security issues.
+      - **Different title or canonical:** check caching plugins, A/B tests and prerendering: the crawler must
+        get the same version as the visitor.
+      - **Dynamic rendering** (a separate HTML version for crawlers) is a temporary workaround for Google;
+        its content must match what the visitor sees. Moving to SSR is better.
+
+  ai_search_blocked:
+    title: AI search engines cannot read the site
+    description: >-
+      The crawlers that ChatGPT, Perplexity, Claude and other assistants use to find answers and cite sources
+      are blocked, by robots.txt or by the server's bot protection. The site will not appear in these
+      assistants' answers and will get no visits from them. This includes bingbot: Copilot answers from the
+      Bing index, and ChatGPT uses it too. These are not model training crawlers; blocking those is a
+      separate decision.
+    recommendation: Let AI search crawlers in if the site wants traffic from AI assistants.
+    message:
+      robots: "$agent: disallowed in robots.txt"
+      server: "$agent: the server answers $status"
+    fix: |
+      **robots.txt.** Allow the search crawlers explicitly, even if training crawlers are disallowed:
+      ```text
+      User-agent: OAI-SearchBot
+      User-agent: ChatGPT-User
+      User-agent: PerplexityBot
+      User-agent: Claude-SearchBot
+      User-agent: Claude-User
+      Allow: /
+
+      User-agent: GPTBot
+      User-agent: ClaudeBot
+      Disallow: /
+      ```
+      **Server protection.** Since 2025 Cloudflare blocks AI crawlers on new domains by default:
+      Security → Bots → "Block AI bots" / AI Crawl Control — allow the crawlers you need. In your own WAF,
+      check rules that block by User-Agent.
+
+  ai_training_blocked:
+    title: AI model training crawlers are blocked
+    description: >-
+      The site does not let crawlers collect its texts for model training. This does not affect regular search
+      or Google's AI answers, nor ChatGPT and Claude answers as long as their search crawlers are allowed.
+      Whether to block them is the owner's decision; it is not an error.
+    message:
+      robots: "$agent (robots.txt)"
+      server: "$agent (server: $status)"
+
+  llms_txt_missing:
+    title: No llms.txt file
+    description: >-
+      llms.txt is a short Markdown description of the site with links to its main sections, meant for
+      language models. It is a proposal, not a standard: Google does not use it, but some AI tools and coding
+      assistants read it. It is most useful for documentation and SaaS.
+    fix: |
+      Put the file at `/llms.txt`:
+      ```markdown
+      # Site name
+
+      > One or two sentences: what it is and who it is for.
+
+      ## Main
+      - [Pricing](https://example.com/pricing): prices and terms
+      - [Documentation](https://example.com/docs): installation and API
+      ```
+
+  llms_txt_invalid:
+    title: Errors in llms.txt
+    description: The llms.txt file exists but does not follow the format or links to pages that do not exist.
+    recommendation: Fix the file according to the llmstxt.org format.
+    message:
+      no_title: "The first line is not a “# Name” heading: “$value”"
+      no_links: "The file has no links in the [name](URL) format"
+      broken: "Broken links: $count ($examples)"
+    fix: |
+      - The first line is a level-one heading with the site name: `# Name`.
+      - Links use Markdown: `[name](https://example.com/page)`, pointing to existing pages without redirects.
+      - Update the file when the site structure changes (generating it at build time is convenient).

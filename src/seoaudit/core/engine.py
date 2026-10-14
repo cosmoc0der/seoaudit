@@ -18,7 +18,7 @@ from seoaudit.core.models import AuditReport, RuleStatus
 from seoaudit.core.page import Page
 from seoaudit.core.probe import ResourceProber
 from seoaudit.core.registry import discover_checks
-from seoaudit.core.report_builder import build_report
+from seoaudit.core.report_builder import build_report, localize_report
 from seoaudit.core.rules import CheckDefinition, RuleSpec, build_rules, load_definition, validate_overrides
 from seoaudit.core.site import discover_site
 from seoaudit.core.urls import UrlScope, host_of, normalize_url
@@ -65,6 +65,16 @@ class Auditor:
             plans.append(_Plan(cls, definition, build_rules(check_id, definition, self.config)))
         validate_overrides(self.config, {r.id for p in plans for r in p.rules.values()})
         return plans
+
+    def localize(self, report: AuditReport) -> AuditReport:
+        plans = self.plan()
+        localize_report(
+            report,
+            [r for p in plans for r in p.rules.values()],
+            self.config.lang,
+            {k: v for p in plans for k, v in p.definition.categories.items()},
+        )
+        return report
 
     def run_sync(self, url: str) -> AuditReport:
         return asyncio.run(self.run(url))

@@ -28,6 +28,7 @@ class StructuredDataCheck(Check):
     async def setup(self) -> None:
         self._found_any = False
         self._home_types: set[str] | None = None
+        self._home_same_as: bool = False
         self._vocab = vocabulary()
         self._retired: dict[str, list[str]] = {}
 
@@ -41,14 +42,18 @@ class StructuredDataCheck(Check):
         if "itemscope" in (page.html or ""):
             blocks.append(_microdata(page.html, page.url))
         retired = set(self.params("rich_result_retired")["types"])
-        items = _merge_by_id(item for block in blocks for item in _walk(block))
+        items = _merge_by_id(item for block in blocks for item in walk_items(block))
         # Google's lists and formats no longer matter inside markup for a feature it has switched off.
-        featured = _merge_by_id(item for block in blocks for item in _walk(block, skip=retired))
+        featured = _merge_by_id(item for block in blocks for item in walk_items(block, skip=retired))
 
-        types = {t for item in items for t in _types(item)}
+        types = {t for item in items for t in item_types(item)}
         self._found_any |= bool(items)
         if page.url == self.ctx.site.base_url:
             self._home_types = types
+            organizations = set(self.params("organization_missing")["types"])
+            self._home_same_as = any(
+                organizations & set(item_types(item)) and not _empty(item.get("sameAs")) for item in items
+            )
         for type_ in types & retired:
             self._retired.setdefault(type_, []).append(page.url)
 
@@ -66,6 +71,9 @@ class StructuredDataCheck(Check):
             expected = set(self.params("organization_missing")["types"])
             if not expected & self._home_types:
                 self.fail("organization_missing", self.ctx.site.base_url)
+                self.not_applicable("organization_same_as", "no_organization")
+            elif not self._home_same_as:
+                self.fail("organization_same_as", self.ctx.site.base_url)
         for type_, urls in sorted(self._retired.items()):
             self.fail("rich_result_retired", urls[0], type=type_, pages=len(urls))
 
@@ -81,7 +89,7 @@ class StructuredDataCheck(Check):
         table: dict[str, list[str]] = self.params(rule)[param]
         reported = set()
         for item in items:
-            for type_ in _types(item):
+            for type_ in item_types(item):
                 listed = next((t for t in self._vocab.lineage(type_) if t in table), None)
                 if listed is None:
                     continue
@@ -117,7 +125,7 @@ def _broken_url(value: str) -> bool:
 
 def _value_problems(item: dict[str, Any]) -> dict[str, list[str]]:
     """Google rejects values in the wrong format even when the property is present."""
-    type_ = next(iter(_types(item)), "Thing")
+    type_ = next(iter(item_types(item)), "Thing")
     result: dict[str, list[str]] = {}
 
     def add(key: str, prop: str, value: Any) -> None:
@@ -140,11 +148,11 @@ def _value_problems(item: dict[str, Any]) -> dict[str, list[str]]:
             target = element.get("item")
             name = element.get("name") or (target.get("name") if isinstance(target, dict) else None)
             if _empty(name):
-                result.setdefault("breadcrumb", []).append(f"ListItem {index}: нет name")
+                result.setdefault("breadcrumb_name", []).append(f"ListItem {index}")
             if _empty(target) and index < len(elements):
-                result.setdefault("breadcrumb", []).append(f"ListItem {index}: нет item")
+                result.setdefault("breadcrumb_item", []).append(f"ListItem {index}")
             if not str(element.get("position", "")).strip().isdigit():
-                result.setdefault("breadcrumb", []).append(f"ListItem {index}: position не число")
+                result.setdefault("breadcrumb_position", []).append(f"ListItem {index}")
     return result
 
 
@@ -164,18 +172,18 @@ def _merge_by_id(items: Iterator[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def _walk(node: Any, skip: set[str] = frozenset()) -> Iterator[dict[str, Any]]:
+def walk_items(node: Any, skip: set[str] = frozenset()) -> Iterator[dict[str, Any]]:
     if isinstance(node, list):
         for item in node:
-            yield from _walk(item, skip)
+            yield from walk_items(item, skip)
     elif isinstance(node, dict):
         if "@type" in node:
-            if skip & set(_types(node)):
+            if skip & set(item_types(node)):
                 return
             yield node
         for key, value in node.items():
             if key != "@context":
-                yield from _walk(value, skip)
+                yield from walk_items(value, skip)
 
 
 def _absent(item: dict[str, Any], path: str) -> bool:
@@ -198,7 +206,7 @@ def _microdata(html: str, url: str) -> list[dict[str, Any]]:
     return data.get("microdata", [])
 
 
-def _types(item: dict[str, Any]) -> list[str]:
+def item_types(item: dict[str, Any]) -> list[str]:
     raw = item.get("@type")
     values = raw if isinstance(raw, list) else [raw]
     return [str(v).rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1] for v in values if v]

@@ -1,0 +1,203 @@
+rules:
+  title_missing:
+    title: Missing title tag
+    description: >-
+      The title is one of the most important on-page ranking factors and the heading of the search snippet.
+      Without it, the search engine generates a heading on its own, often a poor one.
+    recommendation: Add a unique, informative title to every page.
+    fix: |
+      Add a `<title>` tag to `<head>` with the key phrase at the start:
+      ```html
+      <head>
+        <title>Page name — detail | Site name</title>
+      </head>
+      ```
+      In the CMS or framework, set a title template for each page type
+      (category, product, article) so it is generated automatically.
+
+  title_multiple:
+    title: Multiple title tags on a page
+    description: Several titles confuse the search engine, and it may pick the wrong heading.
+    recommendation: Keep exactly one title in `<head>`.
+    message: "Title tags found: $count"
+    fix: |
+      Find the duplicate `<title>` output in the templates (layout, header, SEO plugins) and keep one.
+      A common cause is the CMS theme and an SEO plugin both outputting a title.
+
+  title_length:
+    title: Title length is not optimal
+    description: >-
+      A title that is too short does not describe the page; one that is too long is cut off in search results.
+      Google truncates the heading by pixel width, not by character count: wide letters (W, M) take more space.
+      Aim for $min_px to $max_px px, roughly 30–60 characters.
+    recommendation: Fit the title into $min_px–$max_px px, with the essentials in the first words.
+    message:
+      short: "Width ~$width px (under $min_px px), characters: $length — “$value”"
+      long: "Width ~$width px (cut off after ~$max_px px), characters: $length — “$value”"
+    fix: |
+      - Put the main key phrase at the start of the title.
+      - Add qualifiers: region, product type, benefit.
+      - Move the brand name to the end after `|` or `—`.
+      - For template pages, trim the dynamic part by length on the backend.
+
+  title_duplicate:
+    title: Duplicate titles
+    description: >-
+      Identical titles on different pages make it hard for the search engine to decide which page to show for
+      a query and lead to cannibalization.
+    recommendation: Make the title unique for every indexable page.
+    message: "“$value” — on $count more pages"
+    fix: |
+      Add distinguishing elements to the title template: the product or category name, the pagination page
+      number (`— page 2`), filter values.
+      If the pages really duplicate each other, merge them with a 301 redirect
+      or point `<link rel="canonical">` to the main one.
+
+  description_missing:
+    title: Missing meta description
+    description: >-
+      The description is used for the snippet, especially in Yandex. Without it, the search engine picks a text
+      fragment on its own, not always a good one.
+    recommendation: Add a compelling page description in meta description.
+    fix: |
+      ```html
+      <meta name="description" content="A short description of the page: what is here, the main benefit and a call to action.">
+      ```
+      For bulk pages, set up a template: `{Name} — {key benefit}. {Call to action}.`
+
+  description_length:
+    title: Meta description length is not optimal
+    description: >-
+      The search snippet is cut off by pixel width: aim for $min_px to $max_px px, roughly 70–155 characters.
+      The search engine replaces a description that is too short with a fragment of the page text.
+    recommendation: Fit the description into $min_px–$max_px px.
+    message:
+      short: "Width ~$width px (under $min_px px), characters: $length — “$value”"
+      long: "Width ~$width px (cut off after ~$max_px px), characters: $length — “$value”"
+    fix: |
+      Write 1–2 sentences: what is on the page, the key benefit, a call to action.
+      Put the important part in the first 120 characters: the snippet is shorter on mobile.
+
+  description_duplicate:
+    title: Duplicate meta descriptions
+    description: Identical descriptions make snippets less relevant and signal template content.
+    recommendation: Make the description unique for every indexable page.
+    message: "“$value” — on $count more pages"
+    fix: |
+      Use the page's dynamic data in the template (name, price, specifications).
+      If a unique text cannot be produced, leaving the description empty is better than duplicating it:
+      the search engine will pick a fragment itself.
+
+  viewport_missing:
+    title: Missing meta viewport
+    description: >-
+      Without a viewport, mobile browsers show a scaled-down desktop version. The page is not considered
+      mobile-friendly, which is critical under mobile-first indexing.
+    recommendation: Add meta viewport to `<head>` on every page.
+    fix: |
+      ```html
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      ```
+
+  viewport_invalid:
+    title: Invalid meta viewport
+    description: A viewport without `width=device-width` or with zoom disabled hurts mobile UX and accessibility.
+    recommendation: Use a responsive viewport that does not disable zoom.
+    message:
+      width: "No width=device-width: “$value”"
+      zoom: "Zoom is disabled: “$value”"
+    fix: |
+      Replace the value with the standard one:
+      ```html
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      ```
+      Remove `user-scalable=no` and `maximum-scale=1`: users with low vision must be able to zoom in.
+
+  charset_missing:
+    title: Page encoding is not specified
+    description: Without an explicit encoding, browsers and crawlers may display the text garbled.
+    recommendation: Declare UTF-8 in the response header and in the HTML.
+    fix: |
+      As the first line in `<head>`:
+      ```html
+      <meta charset="utf-8">
+      ```
+      And in the server response header: `Content-Type: text/html; charset=utf-8`.
+
+  lang_missing:
+    title: Page language is not specified (html lang)
+    description: The lang attribute is needed by screen readers, the browser translator and Bing; Google detects the language from the text.
+    recommendation: Set the language in the lang attribute of the html tag.
+    fix: |
+      ```html
+      <html lang="en">
+      ```
+      On a multilingual site, the value must match the language of that version (`kk`, `ru`, etc.).
+
+  meta_refresh:
+    title: meta refresh is used
+    description: >-
+      A meta refresh redirect fires only after the page loads; it is slower than a server redirect and awkward
+      for users, and with a delay search engines treat it as temporary.
+    recommendation: Replace meta refresh with a server-side 301 redirect.
+    message: "meta refresh: “$value”"
+    fix: |
+      Remove `<meta http-equiv="refresh" ...>` and set up the redirect on the server.
+      nginx:
+      ```nginx
+      location = /old-page { return 301 https://example.com/new-page; }
+      ```
+      Apache (.htaccess):
+      ```apache
+      Redirect 301 /old-page https://example.com/new-page
+      ```
+
+  og_missing:
+    title: No Open Graph markup
+    description: >-
+      Open Graph defines how the page looks when shared on social networks and messengers (Telegram, WhatsApp,
+      Facebook). Without it the preview is assembled at random.
+    recommendation: "Add the Open Graph tags: $required."
+    message: "Missing: $missing"
+    fix: |
+      ```html
+      <meta property="og:type" content="website">
+      <meta property="og:title" content="Page title">
+      <meta property="og:description" content="Short description">
+      <meta property="og:image" content="https://example.com/og/page.jpg">
+      <meta property="og:url" content="https://example.com/page">
+      ```
+      The recommended og:image size is 1200×630 px.
+
+  twitter_card_missing:
+    title: No Twitter Card markup
+    description: Twitter Card controls link previews on X (Twitter). Without it, Open Graph is used.
+    recommendation: Add `twitter:card` if needed.
+    fix: |
+      ```html
+      <meta name="twitter:card" content="summary_large_image">
+      ```
+
+  favicon_missing:
+    title: No favicon
+    description: The favicon appears next to the site in Google and Yandex results and makes it more recognizable.
+    recommendation: Add a favicon and declare it in `<head>`.
+    fix: |
+      ```html
+      <link rel="icon" href="/favicon.ico" sizes="32x32">
+      <link rel="icon" href="/icon.svg" type="image/svg+xml">
+      <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+      ```
+      The icon must be square: Google needs at least 8×8 px and recommends more than 48×48 px;
+      Yandex recommends 120×120 px (SVG or PNG). The file must not be blocked in robots.txt.
+
+  description_multiple:
+    title: Multiple meta descriptions on a page
+    description: >-
+      The search engine picks one of the descriptions at its discretion or ignores them all, making the snippet
+      unpredictable.
+    recommendation: Keep exactly one meta description.
+    message: "Description tags: $count ($values)"
+    fix: |
+      The second description usually comes from the CMS theme and an SEO plugin, or a template and a separate
+      component, both outputting it. Find every `<meta name="description">` output and keep one.

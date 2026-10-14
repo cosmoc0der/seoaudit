@@ -2,7 +2,7 @@
 # All keys are optional; omitted ones fall back to defaults.
 # Full list of rules with current params: seoaudit rules -c config.yaml
 
-lang: ru
+lang: ru                   # report language: ru or en
 
 crawl:
   max_pages: 300
@@ -44,6 +44,12 @@ checks:
     options:
       validator: auto      # auto | local (vnu, no network) | online (validator_url)
       validator_pages: null
+  rendering:
+    options:
+      max_pages: 10        # pages rendered in headless Chromium and compared with the server HTML
+  bots:
+    options:
+      sample_pages: 5      # pages fetched as a browser and as Googlebot to detect cloaking
   # security:
   #   enabled: false
 

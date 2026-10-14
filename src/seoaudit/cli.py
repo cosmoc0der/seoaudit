@@ -30,6 +30,7 @@ def _main() -> None:
 
 
 ConfigOption = Annotated[Optional[Path], typer.Option("--config", "-c", help="YAML config file.")]
+LangOption = Annotated[Optional[str], typer.Option(help="Report language: ru or en.")]
 RecommendationsOption = Annotated[
     Optional[bool],
     typer.Option("--recommendations/--no-recommendations", help="Include what-to-do and developer instructions."),
@@ -55,7 +56,7 @@ def audit(
     out: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")] = Path("reports"),
     formats: Annotated[Optional[list[str]], typer.Option("--format", "-f", help="pdf, html, json, csv")] = None,
     max_pages: Annotated[Optional[int], typer.Option(help="Crawl limit.")] = None,
-    lang: Annotated[Optional[str], typer.Option(help="Report language.")] = None,
+    lang: LangOption = None,
     disable: Annotated[Optional[list[str]], typer.Option("--disable", "-d", help="Checks to skip, e.g. pagespeed,html")] = None,
     recommendations: RecommendationsOption = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
@@ -110,11 +111,15 @@ def render(
     config: ConfigOption = None,
     out: Annotated[Path, typer.Option("--out", "-o")] = Path("reports"),
     formats: Annotated[Optional[list[str]], typer.Option("--format", "-f")] = None,
+    lang: LangOption = None,
     recommendations: RecommendationsOption = None,
 ) -> None:
-    """Re-render reports from a saved JSON without re-crawling."""
-    cfg = _load(config, report=_report_overrides(recommendations))
-    _write(load_report(report_json), out, cfg, _formats(_split(formats), ["pdf"]))
+    """Re-render reports from a saved JSON without re-crawling, optionally in another language."""
+    cfg = _load(config, lang=lang, report=_report_overrides(recommendations))
+    report = load_report(report_json)
+    if lang and lang != report.lang:
+        report = Auditor(cfg).localize(report)
+    _write(report, out, cfg, _formats(_split(formats), ["pdf"]))
 
 
 @app.command()

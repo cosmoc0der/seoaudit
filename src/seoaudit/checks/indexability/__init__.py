@@ -6,7 +6,7 @@ import uuid
 from collections import defaultdict
 from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 
-from seoaudit.checks._utils import report_target
+from seoaudit.checks._utils import is_paginated, report_target
 from seoaudit.core import robots_txt
 from seoaudit.core.check import Check
 from seoaudit.core.http import fetch
@@ -46,7 +46,7 @@ class IndexabilityCheck(Check):
             self.fail("canonical_non_self", page.url, target=pretty_url(canonicals[0]))
 
         max_depth = self.params("deep_pages")["max_depth"]
-        if page.indexable and page.depth is not None and page.depth > max_depth:
+        if page.indexable and page.depth is not None and page.depth > max_depth and not is_paginated(page.url):
             self.fail("deep_pages", page.url, depth=page.depth)
         self._page_extras(page)
 
@@ -88,7 +88,7 @@ class IndexabilityCheck(Check):
         for sitemap in sitemaps:
             # An undeclared /sitemap.xml guess that 404s is just absent; a declared one is a broken directive.
             if sitemap.error and (sitemap.status != 404 or sitemap.declared_in_robots):
-                self.fail("sitemap_invalid", sitemap.url, key=sitemap.error_kind, error=_sitemap_error(sitemap))
+                self.fail("sitemap_invalid", sitemap.url, **_sitemap_error(sitemap))
 
         for url in self.ctx.site.sitemap_urls:
             if url in self.ctx.blocked:
@@ -272,7 +272,7 @@ class IndexabilityCheck(Check):
             self.not_applicable("not_in_sitemap", "sitemap_truncated")
             return
         for page in self.ctx.html_pages():
-            if page.indexable and page.url not in site.sitemap_urls:
+            if page.indexable and page.url not in site.sitemap_urls and not is_paginated(page.url):
                 self.fail("not_in_sitemap", page.url)
 
     def _sitemap_limits(self) -> None:
@@ -339,12 +339,12 @@ class IndexabilityCheck(Check):
             self.fail("url_variants_duplicate", variant, key=kind, original=pretty_url(original), count=len(pairs))
 
 
-def _sitemap_error(sitemap: SitemapFile) -> str:
+def _sitemap_error(sitemap: SitemapFile) -> dict[str, str]:
     """Parser messages are English; the report only needs where the XML breaks."""
     if sitemap.error_kind != "parse":
-        return pretty_url(sitemap.error)
+        return {"key": sitemap.error_kind, "error": pretty_url(sitemap.error)}
     match = _XML_POSITION.search(sitemap.error)
-    return f"строка {match[1]}, позиция {match[2]}" if match else "нарушена структура файла"
+    return {"key": "parse", "line": match[1], "col": match[2]} if match else {"key": "parse_structure"}
 
 
 def _robots_source(page: Page) -> str:

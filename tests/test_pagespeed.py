@@ -15,6 +15,15 @@ LHR = {
     "categories": {
         "performance": {"score": 0.42},
         "seo": {"auditRefs": [{"id": "meta-description", "weight": 1}, {"id": "document-title", "weight": 1}]},
+        "accessibility": {
+            "auditRefs": [
+                {"id": "color-contrast", "weight": 7},
+                {"id": "image-alt", "weight": 10},
+                {"id": "td-has-header", "weight": 0},
+                {"id": "new-audit", "weight": 3},
+            ]
+        },
+        "best-practices": {"auditRefs": [{"id": "errors-in-console", "weight": 1}, {"id": "is-on-https", "weight": 5}]},
     },
     "audits": {
         "largest-contentful-paint": {"numericValue": 4100.4},
@@ -25,6 +34,12 @@ LHR = {
         "render-blocking-insight": {"title": "Render blocking", "score": 0, "metricSavings": {"FCP": 900, "LCP": 900}},
         "unused-css-rules": {"title": "Unused CSS", "score": 0.5, "details": {"type": "opportunity", "overallSavingsMs": 300}},
         "bootup-time": {"title": "JS execution", "score": 1, "metricSavings": {"TBT": 200}},
+        "color-contrast": {"title": "Low contrast", "score": 0, "details": {"items": [{}, {}, {}]}},
+        "image-alt": {"title": "Images without alt", "score": 0},
+        "td-has-header": {"title": "Table headers", "score": 0},
+        "new-audit": {"title": "Something new", "score": 0},
+        "errors-in-console": {"title": "Console errors", "score": 0},
+        "is-on-https": {"title": "Not HTTPS", "score": 0},
     },
 }
 
@@ -48,7 +63,7 @@ def audit(monkeypatch, transport, result):
         return FakeRunner(result)
 
     monkeypatch.setattr(PageSpeedCheck, "_runner", runner)
-    cfg = AuditConfig.model_validate({"checks": {"html": {"options": {"validator_pages": 0}}}})
+    cfg = AuditConfig.model_validate({"checks": {"rendering": {"enabled": False}, "html": {"options": {"validator_pages": 0}}}})
     report = Auditor(cfg, transport=transport).run_sync(SITE)
     return {r.id: r for r in report.rules() if r.check == "pagespeed"}
 
@@ -62,6 +77,11 @@ def test_lighthouse_result_is_evaluated(monkeypatch, transport):
     assert rules["pagespeed.lcp_slow"].findings[0].data["value"] == 4100
     assert rules["pagespeed.cls_high"].status == RuleStatus.PASSED
     assert rules["pagespeed.lighthouse_seo"].findings[0].data["audits"] == ["No meta description"]
+    # Grouped by rule; unweighted audits and those other modules report are left out.
+    assert rules["pagespeed.a11y_contrast"].findings[0].data["audits"] == ["Low contrast (3)"]
+    assert rules["pagespeed.a11y_other"].findings[0].data["audits"] == ["Something new"]
+    assert rules["pagespeed.a11y_structure"].status == RuleStatus.PASSED
+    assert rules["pagespeed.lighthouse_best_practices"].findings[0].data["audits"] == ["Console errors"]
     assert rules["pagespeed.field_cwv"].status == RuleStatus.NOT_APPLICABLE
     assert rules["pagespeed.field_cwv"].note == "field_data_local"
 

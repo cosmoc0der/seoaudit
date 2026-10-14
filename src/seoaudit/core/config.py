@@ -73,8 +73,12 @@ class ReportConfig(BaseModel):
     meta: ReportMeta = Field(default_factory=ReportMeta)
 
 
+Lang = Literal["ru", "en"]
+DEFAULT_LANG: Lang = "ru"
+
+
 class AuditConfig(BaseModel):
-    lang: str = "ru"
+    lang: Lang = DEFAULT_LANG
     crawl: CrawlConfig = Field(default_factory=CrawlConfig)
     checks: dict[str, CheckConfig] = Field(default_factory=dict)
     rules: dict[str, RuleOverride] = Field(default_factory=dict)
